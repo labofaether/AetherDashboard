@@ -1,4 +1,4 @@
-# Mission Control Panel
+# Aether Dashboard
 
 A personal productivity system with modular views and project organization.
 
