@@ -1,15 +1,17 @@
 {
-  "name": "web_dev",
+  "name": "productivity-board",
   "version": "1.0.0",
-  "description": "To-Do List based on trello",
-  "main": "script.js",
+  "description": "Minimal personal productivity board",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "mysql2": "^3.11.4"
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
   }
 }

@@ -1,15 +1,25 @@
-// 统一管理数据库连接
-const mysql = require('mysql2/promise');
+const fs = require('fs');
+const path = require('path');
 
-// 配置数据库连接池
-const pool = mysql.createPool({
-    host: '47.242.219.237',
-    user: 'chovy',
-    password: 'Ffy050428.',
-    database: 'authApp',
-    waitForConnections: true,
-    connectionLimit: 10, // 建立最多10个连接
-    queueLimit: 0, // 等待排队的请求数量，0表示无限制
-});
+const dbPath = path.join(__dirname, 'board.json');
 
-module.exports = pool; // 导出连接池
+function readDB() {
+    if (!fs.existsSync(dbPath)) {
+        return { tasks: [], activityLog: [], projects: [] };
+    }
+    try {
+        const data = fs.readFileSync(dbPath, 'utf8');
+        const db = JSON.parse(data);
+        if (!db.activityLog) db.activityLog = [];
+        if (!db.projects) db.projects = [];
+        return db;
+    } catch (e) {
+        return { tasks: [], activityLog: [], projects: [] };
+    }
+}
+
+function writeDB(data) {
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+}
+
+module.exports = { readDB, writeDB };

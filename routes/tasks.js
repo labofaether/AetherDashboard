@@ -1,20 +1,11 @@
 const express = require('express');
-const { getUserTasks, createTask, updateTask, deleteTask, updateTaskDescription } = require('../models/TaskModel');
+const { getAllTasks, createTask, updateTask, deleteTask, updateTaskDescription, clearCompletedTasks } = require('../models/TaskModel');
 const router = express.Router();
 
-// 获取所有任务
-router.get('/', async (req, res) => {
-    const { userID } = req.query;
-
-    // 检查 userID 是否存在
-    if (!userID) {
-        return res.status(400).json({ error: 'User ID is required' });
-    }
-
+router.get('/', (req, res) => {
     try {
-        console.log('Received userID:', userID); // 调试信息
-        const tasks = await getUserTasks(userID);
-        console.log('Fetched tasks:', tasks); // 调试信息
+        const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+        const tasks = getAllTasks(projectId);
         res.json(tasks);
     } catch (err) {
         console.error('Error fetching tasks:', err.message);
@@ -22,14 +13,13 @@ router.get('/', async (req, res) => {
     }
 });
 
-
-// 创建新任务
-router.post('/', async (req, res) => {
-    const { userID, title, description, priority, dueDate } = req.body;
-    const status = 'todocontainer'; // 默认状态为 'todocontainer'
+router.post('/', (req, res) => {
+    const { title, description, priority, dueDate, projectId } = req.body;
+    const status = 'todocontainer';
+    const pid = projectId ? parseInt(projectId) : null;
 
     try {
-        const taskId = await createTask(userID, title, description || '', priority, dueDate || null, status);
+        const taskId = createTask(title, description || '', priority, dueDate || null, status, pid);
         res.status(201).json({ message: 'Task created', taskId });
     } catch (err) {
         console.error('Error creating task:', err.message);
@@ -37,12 +27,11 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 更新任务状态
-router.put('/status', async (req, res) => {
+router.put('/status', (req, res) => {
     const { taskId, status } = req.body;
 
     try {
-        const updated = await updateTask(taskId, status);
+        const updated = updateTask(taskId, status);
         if (updated) {
             res.status(200).json({ message: 'Task status updated' });
         } else {
@@ -54,12 +43,11 @@ router.put('/status', async (req, res) => {
     }
 });
 
-// 更新任务描述
-router.put('/description', async (req, res) => {
+router.put('/description', (req, res) => {
     const { taskId, description } = req.body;
 
     try {
-        const updated = await updateTaskDescription(taskId, description);
+        const updated = updateTaskDescription(taskId, description);
         if (updated) {
             res.status(200).json({ message: 'Task description updated' });
         } else {
@@ -71,12 +59,11 @@ router.put('/description', async (req, res) => {
     }
 });
 
-// 删除任务
-router.delete('/', async (req, res) => {
+router.delete('/', (req, res) => {
     const { taskId } = req.body;
 
     try {
-        const deleted = await deleteTask(taskId);
+        const deleted = deleteTask(taskId);
         if (deleted) {
             res.status(200).json({ message: 'Task deleted' });
         } else {
@@ -84,6 +71,17 @@ router.delete('/', async (req, res) => {
         }
     } catch (err) {
         console.error('Error deleting task:', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/clear-completed', (req, res) => {
+    try {
+        const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+        const count = clearCompletedTasks(projectId);
+        res.status(200).json({ message: `${count} completed tasks cleared`, count });
+    } catch (err) {
+        console.error('Error clearing completed tasks:', err.message);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

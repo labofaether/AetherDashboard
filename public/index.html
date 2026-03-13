@@ -2,19 +2,236 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width", initial-scale="1.0">
-    <title>login / Register</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Control Panel</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Login or Register</h1>
-    <form id="loginForm">
-        <input type="text" id="username" placeholder="Username" required>
-        <input type="password" id="password" placeholder="Password" required>
-        <button type="submit">Login</button>
-    </form>
-    <p>Don't have an account? <a href="#" id="registerLink">Register here</a></p>
+    <div class="app-container">
+        <header class="top-nav">
+            <div class="nav-left">
+                <div class="status-indicator">
+                    <div class="status-dot"></div>
+                    <span class="status-text">Online</span>
+                </div>
+                <h1 class="title">Mission Control</h1>
+            </div>
+            <nav class="nav-modules">
+                <button class="module-btn active" data-module="dashboard">
+                    <span class="module-label">Dashboard</span>
+                </button>
+                <button class="module-btn" data-module="board">
+                    <span class="module-label">Board</span>
+                </button>
+                <button class="module-btn" data-module="calendar">
+                    <span class="module-label">Calendar</span>
+                </button>
+                <button class="module-btn" data-module="list">
+                    <span class="module-label">List</span>
+                </button>
+            </nav>
+            <div class="nav-right">
+                <div class="current-time" id="currentTime">--:--:--</div>
+            </div>
+        </header>
 
-    <script src="loginscript.js"></script>
+        <div class="main-layout">
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-header">
+                        <h3 class="sidebar-title">Projects</h3>
+                        <button class="icon-btn" id="addProjectBtn" title="Add Project">
+                            <span>+</span>
+                        </button>
+                    </div>
+                    <div class="project-list" id="projectList">
+                        <div class="project-item active" data-project-id="all">
+                            <span class="project-color" style="background: #10a37f"></span>
+                            <span class="project-name">All Projects</span>
+                            <span class="project-count" id="allCount">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section activity-log">
+                    <h3 class="sidebar-title">Activity Log</h3>
+                    <div class="activity-list" id="activityList">
+                        <div class="no-activity">No recent activity...</div>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="main-content">
+                <div id="dashboardView" class="module-view">
+                    <div class="dashboard-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon total">T</div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="dashTotal">0</div>
+                                <div class="stat-label">Total</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon doing">P</div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="dashDoing">0</div>
+                                <div class="stat-label">In Progress</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon done">C</div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="dashDone">0</div>
+                                <div class="stat-label">Completed</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon overdue">O</div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="dashOverdue">0</div>
+                                <div class="stat-label">Overdue</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-sections">
+                        <div class="dashboard-section">
+                            <h3 class="section-title">Recent Tasks</h3>
+                            <div class="recent-tasks" id="recentTasks"></div>
+                        </div>
+                        <div class="dashboard-section">
+                            <h3 class="section-title">Upcoming Deadlines</h3>
+                            <div class="upcoming-tasks" id="upcomingTasks"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="boardView" class="module-view hidden">
+                    <div class="input-section">
+                        <div class="input-wrapper">
+                            <input type="text" id="taskInput" placeholder="What needs to be done?" class="task-input">
+                            <div class="input-options">
+                                <input type="datetime-local" id="dueDateInput" class="date-input">
+                                <select id="prioritySelect" class="priority-select">
+                                    <option value="low">Low</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                                <button id="addTaskButton" class="add-button">Add Task</button>
+                            </div>
+                        </div>
+                        <p id="errormessage" class="error-message"></p>
+                    </div>
+
+                    <div class="board">
+                        <div class="column" data-status="todo">
+                            <div class="column-header">
+                                <span class="column-dot todo-dot"></span>
+                                <h2 class="column-title">Backlog</h2>
+                                <span class="task-count" id="todoCount">0</span>
+                            </div>
+                            <ul id="todoList" class="task-list"></ul>
+                        </div>
+
+                        <div class="column" data-status="doing">
+                            <div class="column-header">
+                                <span class="column-dot doing-dot"></span>
+                                <h2 class="column-title">In Progress</h2>
+                                <span class="task-count" id="doingCount">0</span>
+                            </div>
+                            <ul id="doingList" class="task-list"></ul>
+                        </div>
+
+                        <div class="column" data-status="done">
+                            <div class="column-header">
+                                <span class="column-dot done-dot"></span>
+                                <h2 class="column-title">Completed</h2>
+                                <span class="task-count" id="doneCount">0</span>
+                                <button class="icon-btn-small" id="clearDoneBtn" title="Clear Completed">
+                                    <span>×</span>
+                                </button>
+                            </div>
+                            <ul id="doneList" class="task-list"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="calendarView" class="module-view hidden">
+                    <div class="calendar-header">
+                        <button class="icon-btn" id="prevMonth">&lt;</button>
+                        <h2 class="calendar-title" id="calendarTitle"></h2>
+                        <button class="icon-btn" id="nextMonth">&gt;</button>
+                    </div>
+                    <div class="calendar-grid" id="calendarGrid"></div>
+                </div>
+
+                <div id="listView" class="module-view hidden">
+                    <div class="list-controls">
+                        <select id="listFilter" class="priority-select">
+                            <option value="all">All Status</option>
+                            <option value="todo">Backlog</option>
+                            <option value="doing">In Progress</option>
+                            <option value="done">Completed</option>
+                        </select>
+                        <select id="listSort" class="priority-select">
+                            <option value="dueDate">Sort by Due Date</option>
+                            <option value="priority">Sort by Priority</option>
+                            <option value="createdAt">Sort by Created</option>
+                        </select>
+                    </div>
+                    <div class="task-table-container">
+                        <table class="task-table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Title</th>
+                                    <th>Priority</th>
+                                    <th>Due Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="listTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <div id="descriptionModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Task Details</h2>
+                <button id="closeDescriptionButton" class="close-button">&times;</button>
+            </div>
+            <p id="taskDescriptionContent" class="modal-description"></p>
+        </div>
+    </div>
+
+    <div id="projectModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="projectModalTitle">New Project</h2>
+                <button id="closeProjectButton" class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="projectNameInput" placeholder="Project name" class="task-input">
+                <div class="color-picker">
+                    <label>Color:</label>
+                    <div class="color-options" id="colorOptions">
+                        <button class="color-option" data-color="#10a37f" style="background: #10a37f"></button>
+                        <button class="color-option" data-color="#3b82f6" style="background: #3b82f6"></button>
+                        <button class="color-option" data-color="#f59e0b" style="background: #f59e0b"></button>
+                        <button class="color-option" data-color="#ef4444" style="background: #ef4444"></button>
+                        <button class="color-option" data-color="#8b5cf6" style="background: #8b5cf6"></button>
+                        <button class="color-option" data-color="#06b6d4" style="background: #06b6d4"></button>
+                    </div>
+                </div>
+                <button id="saveProjectButton" class="add-button">Save Project</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
 </body>
 </html>
