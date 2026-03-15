@@ -1,6 +1,13 @@
 const API_BASE = '/tasks';
 const PROJECT_API_BASE = '/projects';
 const ACTIVITY_API_BASE = '/activity';
+const EMAIL_API_BASE = '/emails';
+
+let allEmails = [];
+let allEvents = [];
+let currentEmailFilter = 'all';
+let selectedEmailId = null;
+let emailButtonsSetup = false;
 
 let currentModule = 'dashboard';
 let currentProjectId = 'all';
@@ -24,7 +31,19 @@ document.addEventListener('DOMContentLoaded', () => {
     loadProjects();
     loadTasks();
     loadActivityLog();
+    loadEmails();
+    loadImportantEmails();
+    loadEvents();
+    loadSyncStatus();
+    loadLlmSyncStatus();
     setInterval(loadActivityLog, 5000);
+    setInterval(() => {
+        loadEmails();
+        loadImportantEmails();
+        loadEvents();
+        loadSyncStatus();
+        loadLlmSyncStatus();
+    }, 60000);
 });
 
 function updateCurrentTime() {
@@ -55,6 +74,13 @@ function switchModule(module) {
         view.classList.add('hidden');
     });
     document.getElementById(`${module}View`).classList.remove('hidden');
+
+    // Setup email buttons and load emails when switching to email module
+    if (module === 'email') {
+        setupEmailButtons();
+        loadEmails();
+    }
+
     renderCurrentView();
 }
 
@@ -71,6 +97,9 @@ function renderCurrentView() {
             break;
         case 'list':
             renderList();
+            break;
+        case 'email':
+            renderEmails();
             break;
     }
 }
@@ -174,6 +203,11 @@ async function loadProjects() {
     }
 }
 
+function getProject(projectId) {
+    if (!projectId) return null;
+    return allProjects.find(p => p.id === projectId);
+}
+
 function renderProjects() {
     const list = document.getElementById('projectList');
     let html = `
@@ -247,43 +281,6 @@ function updateStats(tasks) {
     document.getElementById('dashOverdue').textContent = overdueCount;
 }
 
-function renderDashboard() {
-    const filtered = getFilteredTasks();
-    updateStats(filtered);
-
-    const recentTasks = [...filtered]
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 8);
-
-    const recentHtml = recentTasks.length ? recentTasks.map(task => `
-        <div class="dash-task-item">
-            <div class="dash-task-title">${escapeHtml(task.title)}</div>
-            <div class="dash-task-meta">
-                <span class="dash-task-priority ${task.priority}">${task.priority.toUpperCase()}</span>
-                <span class="dash-task-due">${task.dueDate ? formatDate(task.dueDate) : 'No due date'}</span>
-            </div>
-        </div>
-    `).join('') : '<div class="no-dash-tasks">No recent tasks</div>';
-
-    document.getElementById('recentTasks').innerHTML = recentHtml;
-
-    const upcomingTasks = filtered
-        .filter(t => t.dueDate && mapStatusToFrontend(t.status) !== 'done')
-        .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
-        .slice(0, 8);
-
-    const upcomingHtml = upcomingTasks.length ? upcomingTasks.map(task => `
-        <div class="dash-task-item">
-            <div class="dash-task-title">${escapeHtml(task.title)}</div>
-            <div class="dash-task-meta">
-                <span class="dash-task-priority ${task.priority}">${task.priority.toUpperCase()}</span>
-                <span class="dash-task-due">${formatDate(task.dueDate)}</span>
-            </div>
-        </div>
-    `).join('') : '<div class="no-dash-tasks">No upcoming deadlines</div>';
-
-    document.getElementById('upcomingTasks').innerHTML = upcomingHtml;
-}
 
 function formatDate(dateStr) {
     const d = new Date(dateStr);
@@ -313,22 +310,22 @@ function renderCalendar() {
     const prevMonth = new Date(year, month, 0);
     for (let i = startDay - 1; i >= 0; i--) {
         const day = prevMonth.getDate() - i;
-        html += renderCalendarDay(day, month - 1, year, true, today, filtered);
+        html += renderCalendarDay(day, month - 1, year, true, today, filtered, allEvents);
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
-        html += renderCalendarDay(day, month, year, false, today, filtered);
+        html += renderCalendarDay(day, month, year, false, today, filtered, allEvents);
     }
 
     const remainingDays = 42 - (startDay + daysInMonth);
     for (let day = 1; day <= remainingDays; day++) {
-        html += renderCalendarDay(day, month + 1, year, true, today, filtered);
+        html += renderCalendarDay(day, month + 1, year, true, today, filtered, allEvents);
     }
 
     grid.innerHTML = html;
 }
 
-function renderCalendarDay(day, month, year, isOtherMonth, today, tasks) {
+function renderCalendarDay(day, month, year, isOtherMonth, today, tasks, events) {
     const date = new Date(year, month, day);
     const isToday = date.toDateString() === today.toDateString();
     const dateStr = date.toISOString().split('T')[0];
@@ -339,14 +336,33 @@ function renderCalendarDay(day, month, year, isOtherMonth, today, tasks) {
         return taskDate === dateStr;
     });
 
-    let tasksHtml = dayTasks.map(task => `
-        <div class="calendar-task ${task.priority}">${escapeHtml(task.title.substring(0, 20))}</div>
+    const dayEvents = (events || []).filter(e => {
+        if (!e.start) return false;
+        const eventDate = new Date(e.start).toISOString().split('T')[0];
+        return eventDate === dateStr;
+    });
+
+    let tasksHtml = dayTasks.map(task => {
+        const project = getProject(task.projectId);
+        return `
+        <div class="calendar-task ${task.priority}">
+            ${project ? `<span class="calendar-task-project" style="background: ${project.color}"></span>` : ''}
+            ${escapeHtml(task.title.substring(0, 20))}
+        </div>
+    `;
+    }).join('');
+
+    let eventsHtml = dayEvents.map(event => `
+        <div class="calendar-event">
+            <span class="calendar-event-dot"></span>
+            ${escapeHtml(event.subject.substring(0, 18))}
+        </div>
     `).join('');
 
     return `
         <div class="calendar-day ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}">
             <div class="calendar-day-number">${day}</div>
-            <div class="calendar-day-tasks">${tasksHtml}</div>
+            <div class="calendar-day-tasks">${tasksHtml}${eventsHtml}</div>
         </div>
     `;
 }
@@ -380,6 +396,7 @@ function renderList() {
     tbody.innerHTML = filtered.map(task => {
         const status = mapStatusToFrontend(task.status);
         const isOverdue = task.dueDate && status !== 'done' && new Date(task.dueDate) < new Date();
+        const project = getProject(task.projectId);
         return `
             <tr>
                 <td>
@@ -389,6 +406,9 @@ function renderList() {
                     </div>
                 </td>
                 <td class="list-title">${escapeHtml(task.title)}</td>
+                <td>
+                    ${project ? `<span class="list-project" style="--project-color: ${project.color}">${escapeHtml(project.name)}</span>` : ''}
+                </td>
                 <td><span class="list-priority ${task.priority}">${task.priority.toUpperCase()}</span></td>
                 <td class="list-due ${isOverdue ? 'overdue' : ''}">${task.dueDate ? formatDate(task.dueDate) : '-'}</td>
                 <td class="list-actions">
@@ -490,7 +510,8 @@ function renderTasks(tasks) {
             task.priority,
             task.dueDate,
             frontendStatus,
-            task.description
+            task.description,
+            task.projectId
         );
         if (frontendStatus === 'todo') {
             todoList.appendChild(listItem);
@@ -506,9 +527,21 @@ function renderTasks(tasks) {
     document.getElementById('doneCount').textContent = doneList.children.length;
 }
 
-function createTaskElement(taskId, taskText, priority, dueDate, status, description) {
+function createTaskElement(taskId, taskText, priority, dueDate, status, description, projectId) {
     const listItem = document.createElement('li');
     listItem.className = `task-card ${priority}`;
+
+    const project = getProject(projectId);
+
+    if (project) {
+        const projectLabel = document.createElement('div');
+        projectLabel.className = 'task-project';
+        projectLabel.innerHTML = `
+            <span class="task-project-dot" style="background: ${project.color}"></span>
+            <span class="task-project-name">${escapeHtml(project.name)}</span>
+        `;
+        listItem.appendChild(projectLabel);
+    }
 
     const taskTitle = document.createElement('p');
     taskTitle.className = 'task-title';
@@ -743,3 +776,654 @@ function showDescription(description) {
     document.getElementById('taskDescriptionContent').textContent = description;
     modal.classList.remove('hidden');
 }
+
+// ================================
+// Email Functions
+// ================================
+
+function setupEmailButtons() {
+    if (emailButtonsSetup) return;
+    emailButtonsSetup = true;
+
+    // Mark all as read button
+    document.getElementById('markAllReadBtn')?.addEventListener('click', markAllAsRead);
+
+    // Connect email button
+    document.getElementById('connectEmailBtn')?.addEventListener('click', connectOutlook);
+
+    // Sync button
+    document.getElementById('syncEmailBtn')?.addEventListener('click', syncEmails);
+
+    // Close email detail
+    document.getElementById('closeEmailDetail')?.addEventListener('click', () => {
+        document.getElementById('emailDetail').classList.add('hidden');
+    });
+
+    // Email tabs
+    document.querySelectorAll('.email-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.email-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentEmailFilter = tab.dataset.filter;
+            renderEmails();
+        });
+    });
+
+    // Email list event delegation
+    const emailList = document.getElementById('emailList');
+    if (emailList) {
+        emailList.addEventListener('click', (e) => {
+            const target = e.target;
+
+            // Convert to task button
+            const convertBtn = target.closest('[data-action="convert"]');
+            if (convertBtn) {
+                e.stopPropagation();
+                const emailId = parseInt(convertBtn.dataset.emailId);
+                openConvertModal(e, emailId);
+                return;
+            }
+
+            // Email item click (show detail)
+            const emailItem = target.closest('.email-item');
+            if (emailItem && !target.closest('.icon-btn-small')) {
+                const emailId = parseInt(emailItem.dataset.emailId);
+                showEmailDetail(emailId);
+            }
+        });
+    }
+
+    // Convert to task modal
+    document.getElementById('closeConvertTaskButton')?.addEventListener('click', () => {
+        document.getElementById('convertTaskModal').classList.add('hidden');
+    });
+    document.getElementById('confirmConvertButton')?.addEventListener('click', confirmConvertToTask);
+
+    // Close modals on backdrop click
+    document.getElementById('emailConnectModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'emailConnectModal') {
+            document.getElementById('emailConnectModal').classList.add('hidden');
+        }
+    });
+    document.getElementById('convertTaskModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'convertTaskModal') {
+            document.getElementById('convertTaskModal').classList.add('hidden');
+        }
+    });
+}
+
+async function loadEmails() {
+    try {
+        let url = EMAIL_API_BASE;
+        if (currentEmailFilter === 'unread') {
+            url += '?unread=true';
+        }
+        const response = await fetch(url);
+        if (response.ok) {
+            const data = await response.json();
+            allEmails = data.emails || [];
+            updateEmailBadge();
+            if (currentModule === 'email') {
+                renderEmails();
+            }
+        }
+    } catch (err) {
+        console.error('Error loading emails:', err);
+    }
+}
+
+let importantEmails = [];
+
+async function loadImportantEmails() {
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/filter/important`);
+        if (response.ok) {
+            const data = await response.json();
+            importantEmails = data.emails || [];
+        }
+    } catch (err) {
+        console.error('Error loading important emails:', err);
+        importantEmails = [];
+    }
+}
+
+function updateEmailBadge() {
+    const badge = document.getElementById('emailBadge');
+    const unreadCount = allEmails.filter(e => !e.isRead).length;
+    if (badge) {
+        if (unreadCount > 0) {
+            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+}
+
+function renderEmails() {
+    const list = document.getElementById('emailList');
+    if (!list) return;
+
+    let filteredEmails = allEmails;
+    if (currentEmailFilter === 'unread') {
+        filteredEmails = allEmails.filter(e => !e.isRead);
+    }
+
+    if (filteredEmails.length === 0) {
+        list.innerHTML = '<div class="no-emails">No emails yet. Click 🔄 to sync.</div>';
+        return;
+    }
+
+    list.innerHTML = filteredEmails.map(email => `
+        <div class="email-item ${email.isRead ? '' : 'unread'}" data-email-id="${email.id}">
+            <div class="email-avatar">${(email.fromName || email.from || '?')[0].toUpperCase()}</div>
+            <div class="email-content">
+                <div class="email-header">
+                    <span class="email-sender">${escapeHtml(email.fromName || email.from)}</span>
+                    <span class="email-date">${formatEmailDate(email.receivedAt)}</span>
+                </div>
+                <div class="email-subject">${escapeHtml(email.subject)}</div>
+                <div class="email-preview">${escapeHtml(email.bodyPreview || '')}</div>
+                ${email.convertedToTask ? '<span class="email-badge-task">Converted to Task</span>' : ''}
+            </div>
+            <div class="email-item-actions">
+                ${!email.convertedToTask ? `<button class="icon-btn-small" data-action="convert" data-email-id="${email.id}" title="Convert to Task">✓</button>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function formatEmailDate(dateStr) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diff = now - d;
+
+    if (diff < 86400000 && d.getDate() === now.getDate()) {
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } else if (diff < 604800000) {
+        return d.toLocaleDateString('en-US', { weekday: 'short' });
+    } else {
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+}
+
+async function showEmailDetail(emailId) {
+    const email = allEmails.find(e => e.id === emailId);
+    if (!email) return;
+
+    selectedEmailId = emailId;
+    const detail = document.getElementById('emailDetail');
+    const content = document.getElementById('emailDetailContent');
+
+    // Mark as read if not already
+    if (!email.isRead) {
+        try {
+            await fetch(`${EMAIL_API_BASE}/${emailId}/read`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isRead: true })
+            });
+            email.isRead = true;
+            updateEmailBadge();
+        } catch (err) {
+            console.error('Error marking as read:', err);
+        }
+    }
+
+    content.innerHTML = `
+        <h2 class="email-detail-subject">${escapeHtml(email.subject)}</h2>
+        <div class="email-detail-meta">
+            <div class="email-detail-sender">
+                <div class="email-avatar">${(email.fromName || email.from || '?')[0].toUpperCase()}</div>
+                <div>
+                    <div class="email-detail-from">${escapeHtml(email.fromName || email.from)}</div>
+                    <div class="email-detail-to">to ${escapeHtml(email.to?.join(', ') || 'me')}</div>
+                </div>
+            </div>
+            <div class="email-detail-date">${new Date(email.receivedAt).toLocaleString()}</div>
+        </div>
+        <div class="email-detail-body">
+            ${email.isHtml ? email.body : escapeHtml(email.body || email.bodyPreview || '').replace(/\n/g, '<br>')}
+        </div>
+        <div class="email-detail-actions">
+            ${!email.convertedToTask ? `
+                <button class="add-button" onclick="openConvertModal(event, ${email.id})">Convert to Task</button>
+            ` : '<span class="email-badge-task">Converted to Task</span>'}
+            <button class="task-action-btn delete-btn" onclick="deleteEmail(${email.id})">Delete</button>
+        </div>
+    `;
+
+    detail.classList.remove('hidden');
+}
+
+function openConvertModal(e, emailId) {
+    e?.stopPropagation();
+    selectedEmailId = emailId;
+    const email = allEmails.find(e => e.id === emailId);
+    if (!email) return;
+
+    document.getElementById('convertTaskTitle').value = email.subject;
+
+    // Populate project select
+    const projectSelect = document.getElementById('convertTaskProject');
+    projectSelect.innerHTML = '<option value="">No Project</option>';
+    allProjects.forEach(p => {
+        projectSelect.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`;
+    });
+
+    document.getElementById('convertTaskModal').classList.remove('hidden');
+}
+
+async function confirmConvertToTask() {
+    if (!selectedEmailId) return;
+
+    const title = document.getElementById('convertTaskTitle').value.trim();
+    const dueDate = document.getElementById('convertTaskDueDate').value || null;
+    const priority = document.getElementById('convertTaskPriority').value;
+    const projectId = document.getElementById('convertTaskProject').value || null;
+
+    if (!title) return;
+
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/${selectedEmailId}/convert-task`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title,
+                priority,
+                dueDate,
+                projectId: projectId ? parseInt(projectId) : null,
+                status: 'todocontainer'
+            })
+        });
+
+        if (response.ok) {
+            document.getElementById('convertTaskModal').classList.add('hidden');
+            loadEmails();
+            loadTasks();
+        }
+    } catch (err) {
+        console.error('Error converting to task:', err);
+    }
+}
+
+async function deleteEmail(emailId) {
+    if (!confirm('Delete this email?')) return;
+
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/${emailId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            document.getElementById('emailDetail').classList.add('hidden');
+            loadEmails();
+        }
+    } catch (err) {
+        console.error('Error deleting email:', err);
+    }
+}
+
+async function loadEvents() {
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/events`);
+        if (response.ok) {
+            const data = await response.json();
+            allEvents = data.events || [];
+        }
+    } catch (err) {
+        console.error('Error loading events:', err);
+    }
+}
+
+async function markAllAsRead() {
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/mark-all-read`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ providerType: 'outlook' })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.count > 0) {
+                alert(`Marked ${data.count} email(s) as read!`);
+            } else {
+                alert('No unread emails to mark as read.');
+            }
+            loadEmails();
+            loadImportantEmails();
+            if (currentModule === 'dashboard') {
+                renderDashboard();
+            }
+        } else {
+            const err = await response.text();
+            alert('Failed to mark all as read: ' + err);
+        }
+    } catch (err) {
+        console.error('Error marking all as read:', err);
+        alert('Failed to mark all as read');
+    }
+}
+
+async function connectOutlook() {
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/providers/outlook/auth-url`);
+        if (response.ok) {
+            const data = await response.json();
+            window.location.href = data.authUrl;
+        }
+    } catch (err) {
+        console.error('Error getting auth URL:', err);
+        alert('Failed to connect to Outlook');
+    }
+}
+
+async function syncEmails() {
+    const btn = document.getElementById('syncEmailBtn');
+    if (!btn) return;
+
+    btn.style.animation = 'spin 1s linear infinite';
+
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ providerType: 'outlook' })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const messages = [];
+            if (data.emailCount > 0) messages.push(`${data.emailCount} email(s)`);
+            if (data.eventCount > 0) messages.push(`${data.eventCount} event(s)`);
+            if (messages.length > 0) {
+                alert(`Synced ${messages.join(' and ')}!`);
+            } else {
+                alert('No new emails or events found.');
+            }
+            loadEmails();
+            loadEvents();
+            if (currentModule === 'dashboard') {
+                renderDashboard();
+            }
+        } else {
+            const err = await response.text();
+            alert('Failed to sync: ' + err);
+        }
+    } catch (err) {
+        console.error('Error syncing:', err);
+        alert('Failed to sync: ' + err.message);
+    } finally {
+        if (btn) btn.style.animation = '';
+    }
+}
+
+let syncStatusData = null;
+let llmSyncStatusData = null;
+
+async function loadSyncStatus() {
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/usage/sync-status`);
+        if (response.ok) {
+            const data = await response.json();
+            syncStatusData = data.status;
+            if (currentModule === 'dashboard') {
+                renderSyncStatus();
+            }
+        }
+    } catch (err) {
+        console.error('Error loading sync status:', err);
+    }
+}
+
+function renderSyncStatus() {
+    const container = document.getElementById('syncStatus');
+    if (!container || !syncStatusData) return;
+
+    const html = syncStatusData.map(status => `
+        <div class="sync-provider">
+            <div class="sync-provider-header">
+                <span class="sync-provider-name">${status.provider.charAt(0).toUpperCase() + status.provider.slice(1)}</span>
+                <span class="sync-status-badge ${status.connected ? 'connected' : 'disconnected'}">
+                    ${status.connected ? 'Connected' : 'Disconnected'}
+                </span>
+            </div>
+            <div class="sync-provider-details">
+                ${status.userEmail ? `
+                <div class="sync-detail-item">
+                    <span class="sync-detail-label">Email</span>
+                    <span class="sync-detail-value">${status.userEmail}</span>
+                </div>
+                ` : ''}
+                <div class="sync-detail-item">
+                    <span class="sync-detail-label">Emails Synced</span>
+                    <span class="sync-detail-value">${status.emailCount}</span>
+                </div>
+                <div class="sync-detail-item">
+                    <span class="sync-detail-label">Last Sync</span>
+                    <span class="sync-detail-value">${status.lastEmailSyncAt ? formatSyncTime(status.lastEmailSyncAt) : 'Never'}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    container.innerHTML = html;
+}
+
+function formatSyncTime(timeStr) {
+    const d = new Date(timeStr);
+    const now = new Date();
+    const diff = now - d;
+
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadLlmSyncStatus() {
+    try {
+        const response = await fetch(`${EMAIL_API_BASE}/llm-usage/sync-status`);
+        if (response.ok) {
+            const data = await response.json();
+            llmSyncStatusData = data.status;
+            if (currentModule === 'dashboard') {
+                renderLlmSyncStatus();
+            }
+        }
+    } catch (err) {
+        console.error('Error loading LLM sync status:', err);
+    }
+}
+
+function renderLlmSyncStatus() {
+    const container = document.getElementById('llmSyncStatus');
+    if (!container || !llmSyncStatusData) return;
+
+    const formatTokens = (tokens) => {
+        if (tokens >= 1000000) return (tokens / 1000000).toFixed(2) + 'M';
+        if (tokens >= 1000) return (tokens / 1000).toFixed(1) + 'K';
+        return tokens.toString();
+    };
+
+    const html = `
+        <div class="sync-provider">
+            <div class="sync-provider-header">
+                <span class="sync-provider-name">LLM API</span>
+                <span class="sync-status-badge connected">Active</span>
+            </div>
+            <div class="sync-provider-details">
+                <div class="sync-detail-item">
+                    <span class="sync-detail-label">Last 5 Hours</span>
+                    <span class="sync-detail-value">${llmSyncStatusData.fiveHourUsage.calls} calls, ${formatTokens(llmSyncStatusData.fiveHourUsage.tokens)} tokens</span>
+                </div>
+                <div class="sync-detail-item">
+                    <span class="sync-detail-label">This Week</span>
+                    <span class="sync-detail-value">${llmSyncStatusData.weeklyUsage.calls} calls, ${formatTokens(llmSyncStatusData.weeklyUsage.tokens)} tokens</span>
+                </div>
+                <div class="sync-detail-item">
+                    <span class="sync-detail-label">This Month</span>
+                    <span class="sync-detail-value">${llmSyncStatusData.monthlyUsage.calls} calls, ${formatTokens(llmSyncStatusData.monthlyUsage.tokens)} tokens</span>
+                </div>
+                <div class="sync-detail-item">
+                    <span class="sync-detail-label">Success Rate</span>
+                    <span class="sync-detail-value">${llmSyncStatusData.recentSuccessRate}</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function renderDashboard() {
+    const filtered = getFilteredTasks();
+    updateStats(filtered);
+
+    const metaContainer = document.getElementById('dashboardMeta');
+    if (metaContainer) {
+        metaContainer.textContent = new Date().toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
+
+    // Recent Tasks
+    const recentTasks = [...filtered]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 8);
+
+    const recentHtml = recentTasks.length ? recentTasks.map(task => {
+        const project = getProject(task.projectId);
+        return `
+        <div class="dash-task-item">
+            <div class="dash-task-title">${escapeHtml(task.title)}</div>
+            <div class="dash-task-meta">
+                ${project ? `<span class="dash-task-project" style="--project-color: ${project.color}">${escapeHtml(project.name)}</span>` : ''}
+                <span class="dash-task-priority ${task.priority}">${task.priority.toUpperCase()}</span>
+                <span class="dash-task-due">${task.dueDate ? formatDate(task.dueDate) : 'No due date'}</span>
+            </div>
+        </div>
+    `;
+    }).join('') : '<div class="no-dash-tasks">No recent tasks</div>';
+
+    const recentContainer = document.getElementById('recentTasks');
+    if (recentContainer) recentContainer.innerHTML = recentHtml;
+
+    // Important Emails (unread and high importance first)
+    renderRecentEmails();
+
+    // Upcoming Deadlines
+    const upcomingTasks = filtered
+        .filter(t => t.dueDate && mapStatusToFrontend(t.status) !== 'done')
+        .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+        .slice(0, 8);
+
+    const upcomingHtml = upcomingTasks.length ? upcomingTasks.map(task => {
+        const project = getProject(task.projectId);
+        return `
+        <div class="dash-task-item">
+            <div class="dash-task-title">${escapeHtml(task.title)}</div>
+            <div class="dash-task-meta">
+                ${project ? `<span class="dash-task-project" style="--project-color: ${project.color}">${escapeHtml(project.name)}</span>` : ''}
+                <span class="dash-task-priority ${task.priority}">${task.priority.toUpperCase()}</span>
+                <span class="dash-task-due">${formatDate(task.dueDate)}</span>
+            </div>
+        </div>
+    `;
+    }).join('') : '<div class="no-dash-tasks">No upcoming deadlines</div>';
+
+    const upcomingContainer = document.getElementById('upcomingTasks');
+    if (upcomingContainer) upcomingContainer.innerHTML = upcomingHtml;
+
+    // Upcoming Meetings
+    renderUpcomingEvents();
+
+    // Sync Status and LLM Status
+    renderSyncStatus();
+    renderLlmSyncStatus();
+}
+
+function renderRecentEmails() {
+    const container = document.getElementById('recentEmails');
+    if (!container) return;
+
+    // Use AI-filtered important emails if available, otherwise fall back to heuristic
+    const emailsToShow = importantEmails && importantEmails.length > 0
+        ? importantEmails.slice(0, 5)
+        : (allEmails || [])
+            .sort((a, b) => {
+                if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
+                if (a.importance !== b.importance) {
+                    const order = { high: 0, normal: 1, low: 2 };
+                    return (order[a.importance] || 1) - (order[b.importance] || 1);
+                }
+                return new Date(b.receivedAt) - new Date(a.receivedAt);
+            })
+            .slice(0, 5);
+
+    if (emailsToShow.length === 0) {
+        container.innerHTML = '<div class="no-dash-tasks">No important emails</div>';
+        return;
+    }
+
+    const emailsHtml = emailsToShow.map(email => `
+        <div class="dash-task-item ${email.isRead ? '' : 'unread'}" onclick="switchToEmail(${email.id})">
+            <div class="dash-task-title">${escapeHtml(email.subject)}</div>
+            <div class="dash-task-meta">
+                <span class="dash-task-project" style="--project-color: #3b82f6">${escapeHtml(email.fromName || email.from)}</span>
+                <span class="dash-task-due">${formatEmailDate(email.receivedAt)}</span>
+            </div>
+        </div>
+    `).join('');
+
+    container.innerHTML = emailsHtml;
+}
+
+function switchToEmail(emailId) {
+    switchModule('email');
+    setTimeout(() => showEmailDetail(emailId), 100);
+}
+
+function renderUpcomingEvents() {
+    const container = document.getElementById('upcomingEvents');
+    if (!container) return;
+
+    if (!allEvents || allEvents.length === 0) {
+        container.innerHTML = '<div class="no-dash-tasks">No upcoming meetings</div>';
+        return;
+    }
+
+    const now = new Date();
+    const upcomingEvents = allEvents
+        .filter(e => new Date(e.start) >= now)
+        .sort((a, b) => new Date(a.start) - new Date(b.start))
+        .slice(0, 5);
+
+    if (upcomingEvents.length === 0) {
+        container.innerHTML = '<div class="no-dash-tasks">No upcoming meetings</div>';
+        return;
+    }
+
+    const eventsHtml = upcomingEvents.map(event => `
+        <div class="dash-task-item">
+            <div class="dash-task-title">${escapeHtml(event.subject)}</div>
+            <div class="dash-task-meta">
+                <span class="dash-task-priority medium">EVENT</span>
+                <span class="dash-task-due">${formatEventDate(event.start)}</span>
+            </div>
+        </div>
+    `).join('');
+
+    container.innerHTML = eventsHtml;
+}
+
+function formatEventDate(dateStr) {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+

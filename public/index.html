@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mission Control Panel</title>
+    <title>Aether Dashboard</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
                     <div class="status-dot"></div>
                     <span class="status-text">Online</span>
                 </div>
-                <h1 class="title">Mission Control</h1>
+                <h1 class="title">Aether Dashboard</h1>
             </div>
             <nav class="nav-modules">
                 <button class="module-btn active" data-module="dashboard">
@@ -25,6 +25,10 @@
                 </button>
                 <button class="module-btn" data-module="calendar">
                     <span class="module-label">Calendar</span>
+                </button>
+                <button class="module-btn" data-module="email">
+                    <span class="module-label">Email</span>
+                    <span class="email-badge hidden" id="emailBadge">0</span>
                 </button>
                 <button class="module-btn" data-module="list">
                     <span class="module-label">List</span>
@@ -63,30 +67,31 @@
 
             <main class="main-content">
                 <div id="dashboardView" class="module-view">
+                    <div class="dashboard-header">
+                        <h2 class="dashboard-title">Overview</h2>
+                        <div class="dashboard-meta" id="dashboardMeta"></div>
+                    </div>
+
                     <div class="dashboard-grid">
                         <div class="stat-card">
-                            <div class="stat-icon total">T</div>
                             <div class="stat-info">
                                 <div class="stat-value" id="dashTotal">0</div>
-                                <div class="stat-label">Total</div>
+                                <div class="stat-label">Total Tasks</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon doing">P</div>
                             <div class="stat-info">
                                 <div class="stat-value" id="dashDoing">0</div>
                                 <div class="stat-label">In Progress</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon done">C</div>
                             <div class="stat-info">
                                 <div class="stat-value" id="dashDone">0</div>
                                 <div class="stat-label">Completed</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon overdue">O</div>
                             <div class="stat-info">
                                 <div class="stat-value" id="dashOverdue">0</div>
                                 <div class="stat-label">Overdue</div>
@@ -94,14 +99,57 @@
                         </div>
                     </div>
 
-                    <div class="dashboard-sections">
-                        <div class="dashboard-section">
-                            <h3 class="section-title">Recent Tasks</h3>
-                            <div class="recent-tasks" id="recentTasks"></div>
+                    <div class="dashboard-content">
+                        <div class="dashboard-column">
+                            <div class="dashboard-section">
+                                <div class="section-header">
+                                    <h3 class="section-title">Tasks</h3>
+                                </div>
+                                <div class="subsection">
+                                    <h4 class="subsection-title">Recent</h4>
+                                    <div class="recent-tasks" id="recentTasks"></div>
+                                </div>
+                                <div class="subsection">
+                                    <h4 class="subsection-title">Upcoming Deadlines</h4>
+                                    <div class="upcoming-tasks" id="upcomingTasks"></div>
+                                </div>
+                            </div>
+
+                            <div class="dashboard-section">
+                                <div class="section-header">
+                                    <h3 class="section-title">Calendar</h3>
+                                </div>
+                                <div class="subsection">
+                                    <h4 class="subsection-title">Upcoming Meetings</h4>
+                                    <div class="upcoming-events" id="upcomingEvents"></div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="dashboard-section">
-                            <h3 class="section-title">Upcoming Deadlines</h3>
-                            <div class="upcoming-tasks" id="upcomingTasks"></div>
+
+                        <div class="dashboard-column">
+                            <div class="dashboard-section">
+                                <div class="section-header">
+                                    <h3 class="section-title">Email</h3>
+                                </div>
+                                <div class="subsection">
+                                    <h4 class="subsection-title">Important</h4>
+                                    <div class="recent-emails" id="recentEmails"></div>
+                                </div>
+                            </div>
+
+                            <div class="dashboard-section">
+                                <div class="section-header">
+                                    <h3 class="section-title">Sync Status</h3>
+                                </div>
+                                <div class="sync-status" id="syncStatus"></div>
+                            </div>
+
+                            <div class="dashboard-section">
+                                <div class="section-header">
+                                    <h3 class="section-title">LLM Status</h3>
+                                </div>
+                                <div class="sync-status" id="llmSyncStatus"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -185,6 +233,7 @@
                                 <tr>
                                     <th>Status</th>
                                     <th>Title</th>
+                                    <th>Project</th>
                                     <th>Priority</th>
                                     <th>Due Date</th>
                                     <th>Actions</th>
@@ -192,6 +241,39 @@
                             </thead>
                             <tbody id="listTableBody"></tbody>
                         </table>
+                    </div>
+                </div>
+
+                <div id="emailView" class="module-view hidden">
+                    <div class="email-header">
+                        <div class="email-tabs">
+                            <button class="email-tab active" data-filter="all">All</button>
+                            <button class="email-tab" data-filter="unread">Unread</button>
+                        </div>
+                        <div class="email-actions">
+                            <button class="icon-btn" id="markAllReadBtn" title="Mark All as Read">
+                                <span>✓</span>
+                            </button>
+                            <button class="icon-btn" id="connectEmailBtn" title="Connect Outlook">
+                                <span>🔗</span>
+                            </button>
+                            <button class="icon-btn" id="syncEmailBtn" title="Sync Emails & Events">
+                                <span>🔄</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="email-container">
+                        <div class="email-list" id="emailList">
+                            <div class="no-emails">No emails yet. Connect your email to get started.</div>
+                        </div>
+                        <div class="email-detail hidden" id="emailDetail">
+                            <div class="email-detail-header">
+                                <button class="icon-btn" id="closeEmailDetail">
+                                    <span>←</span>
+                                </button>
+                            </div>
+                            <div class="email-detail-content" id="emailDetailContent"></div>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -228,6 +310,29 @@
                     </div>
                 </div>
                 <button id="saveProjectButton" class="add-button">Save Project</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="convertTaskModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Convert to Task</h2>
+                <button id="closeConvertTaskButton" class="close-button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="convertTaskTitle" placeholder="Task title" class="task-input">
+                <input type="datetime-local" id="convertTaskDueDate" class="date-input">
+                <select id="convertTaskPriority" class="priority-select">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                </select>
+                <select id="convertTaskProject" class="priority-select">
+                    <option value="">No Project</option>
+                </select>
+                <button id="confirmConvertButton" class="add-button">Create Task</button>
             </div>
         </div>
     </div>

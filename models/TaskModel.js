@@ -9,6 +9,11 @@ function getAllTasks(projectId = null) {
     return tasks.sort((a, b) => b.id - a.id);
 }
 
+function getTaskById(taskId) {
+    const db = readDB();
+    return db.tasks.find(t => t.id === taskId) || null;
+}
+
 function logActivity(action, taskId, taskTitle, details = {}) {
     const db = readDB();
     const logEntry = {
@@ -85,6 +90,10 @@ function deleteTask(taskId) {
         if (task) {
             logActivity('DELETE', taskId, task.title);
         }
+        // Also delete any reminders for this task
+        const db2 = readDB();
+        db2.reminders = db2.reminders.filter(r => r.taskId !== taskId);
+        writeDB(db2);
         return true;
     }
     return false;
@@ -99,6 +108,10 @@ function clearCompletedTasks(projectId = null) {
     const count = completedTasks.length;
     const completedIds = new Set(completedTasks.map(t => t.id));
     db.tasks = db.tasks.filter(t => !completedIds.has(t.id));
+
+    // Also delete reminders for completed tasks
+    db.reminders = db.reminders.filter(r => !completedIds.has(r.taskId));
+
     if (count > 0) {
         writeDB(db);
         logActivity('CLEAR_COMPLETED', null, null, { count });
@@ -106,11 +119,98 @@ function clearCompletedTasks(projectId = null) {
     return count;
 }
 
+// Reminder functions
+function getAllReminders() {
+    const db = readDB();
+    return db.reminders.sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt));
+}
+
+function getRemindersByTask(taskId) {
+    const db = readDB();
+    return db.reminders.filter(r => r.taskId === taskId);
+}
+
+function getDueReminders() {
+    const db = readDB();
+    const now = new Date().toISOString();
+    return db.reminders.filter(r => !r.triggered && r.remindAt <= now);
+}
+
+function setReminder(taskId, remindAt, note = '') {
+    const db = readDB();
+    const task = db.tasks.find(t => t.id === taskId);
+    if (!task) {
+        throw new Error('Task not found');
+    }
+
+    const newId = db.reminders.length > 0 ? Math.max(...db.reminders.map(r => r.id)) + 1 : 1;
+    const reminder = {
+        id: newId,
+        taskId,
+        taskTitle: task.title,
+        remindAt,
+        note,
+        triggered: false,
+        createdAt: new Date().toISOString()
+    };
+
+    db.reminders.push(reminder);
+    writeDB(db);
+    return newId;
+}
+
+function updateReminder(reminderId, updates) {
+    const db = readDB();
+    const reminder = db.reminders.find(r => r.id === reminderId);
+    if (!reminder) {
+        return false;
+    }
+
+    Object.assign(reminder, updates, { updatedAt: new Date().toISOString() });
+    writeDB(db);
+    return true;
+}
+
+function deleteReminder(reminderId) {
+    const db = readDB();
+    const initialLength = db.reminders.length;
+    db.reminders = db.reminders.filter(r => r.id !== reminderId);
+    if (db.reminders.length !== initialLength) {
+        writeDB(db);
+        return true;
+    }
+    return false;
+}
+
+function deleteRemindersByTask(taskId) {
+    const db = readDB();
+    const initialLength = db.reminders.length;
+    db.reminders = db.reminders.filter(r => r.taskId !== taskId);
+    if (db.reminders.length !== initialLength) {
+        writeDB(db);
+        return true;
+    }
+    return false;
+}
+
+function markReminderTriggered(reminderId) {
+    return updateReminder(reminderId, { triggered: true, triggeredAt: new Date().toISOString() });
+}
+
 module.exports = {
     getAllTasks,
+    getTaskById,
     createTask,
     updateTask,
     deleteTask,
     updateTaskDescription,
-    clearCompletedTasks
+    clearCompletedTasks,
+    getAllReminders,
+    getRemindersByTask,
+    getDueReminders,
+    setReminder,
+    updateReminder,
+    deleteReminder,
+    deleteRemindersByTask,
+    markReminderTriggered
 };

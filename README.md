@@ -34,14 +34,27 @@ A personal productivity system with modular views and project organization.
 ### Phase 5: Upcoming
 - TBD
 
+### Phase 6: Email Integration (2026-03-15, In Progress)
+- **Outlook Integration**: OAuth 2.0 authentication with Microsoft Graph API
+- **Email View**: Inbox with read/unread status, sender, subject, preview
+- **Email-to-Task**: Convert emails to tasks with one click
+- **Sync Status**: Display connected email address and sync counts
+- **LLM Usage Tracking**: Monitor API usage in 5-hour, weekly, monthly windows
+- **AI Email Filtering**: Token-efficient heuristic + LLM fallback for important email detection
+- **Mark All as Read**: Bulk mark emails as read with local state first, async provider sync
+- **Performance Optimizations**: Event delegation, non-blocking async operations
+- **Dashboard Redesign**: Two-column layout, professional minimalist style, scrollbars on all views
+
 ## Features
 
 ### Current Features
-- **Multiple Views**: Dashboard, Board, Calendar, and List modes
+- **Multiple Views**: Dashboard, Board, Calendar, List, and Email modes
 - **Project Management**: Create and organize tasks by project with color coding
 - **Task Attributes**: Title, description, priority (Low/Medium/High), due date, status
 - **Activity Log**: Track all task changes
 - **Statistics**: Real-time counts for total, in progress, completed, and overdue tasks
+- **Email Integration**: Outlook sync, email view, email-to-task conversion
+- **LLM Integration**: AI email filtering, API usage tracking
 
 ### Tech Stack
 - **Backend**: Node.js + Express
@@ -71,19 +84,33 @@ npm start
 
 ```
 To-Do_List/
-├── server.js              # Express server entry point
-├── db.js                  # JSON data layer
+├── server.js                 # Express server entry point
+├── db.js                     # JSON data layer
+├── config/
+│   └── emailProviders.js     # Email provider configuration
+├── emailProviders/
+│   ├── EmailProviderInterface.js  # Abstract provider interface
+│   └── OutlookProvider.js    # Microsoft Graph API implementation
 ├── models/
-│   ├── TaskModel.js       # Task CRUD operations
-│   └── ProjectModel.js    # Project CRUD operations
+│   ├── TaskModel.js          # Task CRUD operations
+│   ├── ProjectModel.js       # Project CRUD operations
+│   ├── EmailModel.js         # Email CRUD and sync operations
+│   ├── ApiUsageModel.js      # API usage tracking
+│   └── LlmUsageModel.js      # LLM usage tracking
 ├── routes/
-│   ├── tasks.js           # Task API endpoints
-│   ├── projects.js        # Project API endpoints
-│   └── activity.js        # Activity API endpoints
+│   ├── tasks.js              # Task API endpoints
+│   ├── projects.js           # Project API endpoints
+│   ├── activity.js           # Activity API endpoints
+│   └── emails.js             # Email API endpoints
+├── services/
+│   ├── ReminderService.js    # Background reminder and sync service
+│   └── EmailFilterService.js # AI email filtering
+├── .env                      # Environment variables (API credentials)
+├── board.json                # Data storage
 └── public/
-    ├── index.html         # Main UI
-    ├── style.css          # Minimalist styling
-    └── script.js          # Frontend logic
+    ├── index.html            # Main UI
+    ├── style.css             # Minimalist styling
+    └── script.js             # Frontend logic
 ```
 
 ## API Endpoints
