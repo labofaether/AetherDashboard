@@ -981,6 +981,19 @@ body {
     color: var(--danger);
 }
 
+.task-completed {
+    font-size: 12px;
+    color: var(--success);
+    font-family: var(--font-mono);
+    padding: 6px 10px;
+    background: rgba(16, 185, 129, 0.1);
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .task-actions {
     display: flex;
     gap: 8px;
@@ -1319,6 +1332,16 @@ body {
 
 .list-due.overdue {
     color: var(--danger);
+}
+
+.list-completed {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+}
+
+.list-completed:not(:empty) {
+    color: var(--success);
 }
 
 .list-actions {

@@ -45,7 +45,8 @@ function createTask(title, description, priority, dueDate, status, projectId = n
         tags,
         createdAt: now,
         updatedAt: now,
-        dueDate: dueDate || null
+        dueDate: dueDate || null,
+        completedAt: null
     };
     db.tasks.push(task);
     writeDB(db);
@@ -60,6 +61,14 @@ function updateTask(taskId, status) {
         const oldStatus = task.status;
         task.status = status;
         task.updatedAt = new Date().toISOString();
+
+        // Set completedAt when moving to done, clear when moving out of done
+        if (status === 'donecontainer' && oldStatus !== 'donecontainer') {
+            task.completedAt = new Date().toISOString();
+        } else if (status !== 'donecontainer' && oldStatus === 'donecontainer') {
+            task.completedAt = null;
+        }
+
         writeDB(db);
         logActivity('STATUS_CHANGE', taskId, task.title, { from: oldStatus, to: status });
         return true;

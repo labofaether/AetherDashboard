@@ -5,15 +5,21 @@
 
 const TaskModel = require('../models/TaskModel');
 const EmailModel = require('../models/EmailModel');
+const dataCleanupService = require('./DataCleanupService');
+const retentionConfig = require('../config/dataRetention');
 const cron = require('node-cron');
 
 class ReminderService {
     constructor() {
         this.checkInterval = parseInt(process.env.REMINDER_CHECK_INTERVAL) || 60000;
         this.emailSyncInterval = parseInt(process.env.EMAIL_SYNC_INTERVAL) || 300000;
+        this.lightCleanupInterval = retentionConfig.schedule.lightCleanupInterval;
+        this.fullCleanupInterval = retentionConfig.schedule.fullCleanupInterval;
         this.isRunning = false;
         this.checkTimer = null;
         this.syncTimer = null;
+        this.lightCleanupTimer = null;
+        this.fullCleanupTimer = null;
         this.cronJobs = [];
         this.listeners = [];
     }
@@ -93,6 +99,38 @@ class ReminderService {
     }
 
     /**
+     * Run light data cleanup
+     */
+    runLightCleanup() {
+        try {
+            const removed = dataCleanupService.runLightCleanup();
+            if (removed > 0) {
+                this.emit('light-cleanup', { removed });
+            }
+            return removed;
+        } catch (error) {
+            console.error('Error running light cleanup:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * Run full data cleanup
+     */
+    runFullCleanup() {
+        try {
+            const removed = dataCleanupService.runFullCleanup();
+            if (removed > 0) {
+                this.emit('full-cleanup', { removed });
+            }
+            return removed;
+        } catch (error) {
+            console.error('Error running full cleanup:', error);
+            return 0;
+        }
+    }
+
+    /**
      * Start the reminder service
      */
     start() {
@@ -114,9 +152,28 @@ class ReminderService {
             this.syncEmails();
         }, this.emailSyncInterval);
 
-        // Do initial check and sync
+        // Light cleanup every hour
+        this.lightCleanupTimer = setInterval(() => {
+            this.runLightCleanup();
+        }, this.lightCleanupInterval);
+
+        // Full cleanup once a day
+        this.fullCleanupTimer = setInterval(() => {
+            this.runFullCleanup();
+        }, this.fullCleanupInterval);
+
+        // Do initial check, sync, and cleanup
         this.checkReminders();
         this.syncEmails();
+
+        // Run initial cleanup in background
+        setTimeout(() => {
+            try {
+                dataCleanupService.runInitialCleanup();
+            } catch (error) {
+                console.error('Error during initial cleanup:', error);
+            }
+        }, 5000);
 
         console.log(`Reminder Service started (check interval: ${this.checkInterval}ms, sync interval: ${this.emailSyncInterval}ms)`);
     }
@@ -139,6 +196,16 @@ class ReminderService {
         if (this.syncTimer) {
             clearInterval(this.syncTimer);
             this.syncTimer = null;
+        }
+
+        if (this.lightCleanupTimer) {
+            clearInterval(this.lightCleanupTimer);
+            this.lightCleanupTimer = null;
+        }
+
+        if (this.fullCleanupTimer) {
+            clearInterval(this.fullCleanupTimer);
+            this.fullCleanupTimer = null;
         }
 
         this.cronJobs.forEach(job => job.stop());

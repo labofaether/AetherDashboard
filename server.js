@@ -7,7 +7,8 @@ const activityRoutes = require('./routes/activity');
 const emailRoutes = require('./routes/emails');
 const cors = require('cors');
 const reminderService = require('./services/ReminderService');
-const PORT = 3000;
+const { forceFlush } = require('./db');
+const PORT = parseInt(process.env.PORT) || 3000;
 const app = express();
 
 app.use(express.json());
@@ -18,22 +19,25 @@ app.use('/projects', projectRoutes);
 app.use('/activity', activityRoutes);
 app.use('/emails', emailRoutes);
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Aether Dashboard running at http://localhost:${PORT}`);
+    console.log(`Press Ctrl+C to stop the server`);
     // Start reminder service
     reminderService.start();
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
     console.log('Shutting down gracefully...');
     reminderService.stop();
+    await forceFlush();
     process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     console.log('Shutting down gracefully...');
     reminderService.stop();
+    await forceFlush();
     process.exit(0);
 });
 

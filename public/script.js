@@ -18,6 +18,7 @@ let calendarMonth = new Date();
 
 document.addEventListener('DOMContentLoaded', () => {
     setupModuleButtons();
+    setupVideoAgentButton();
     setupProjectButtons();
     setupModalButtons();
     setupBoardButtons();
@@ -59,10 +60,21 @@ function updateCurrentTime() {
 
 function setupModuleButtons() {
     document.querySelectorAll('.module-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            switchModule(btn.dataset.module);
-        });
+        if (btn.dataset.module) {
+            btn.addEventListener('click', () => {
+                switchModule(btn.dataset.module);
+            });
+        }
     });
+}
+
+function setupVideoAgentButton() {
+    const videoBtn = document.getElementById('videoAgentBtn');
+    if (videoBtn) {
+        videoBtn.addEventListener('click', () => {
+            window.open('http://localhost:3001', '_blank');
+        });
+    }
 }
 
 function switchModule(module) {
@@ -250,8 +262,8 @@ function getFilteredTasks() {
 
 async function loadTasks() {
     try {
-        const pid = currentProjectId === 'all' ? '' : `?projectId=${currentProjectId}`;
-        const response = await fetch(API_BASE + pid);
+        // Always load ALL tasks, filter at display time
+        const response = await fetch(API_BASE);
         if (response.ok) {
             allTasks = await response.json();
             renderProjects();
@@ -285,6 +297,17 @@ function updateStats(tasks) {
 function formatDate(dateStr) {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatCompletedDateTime(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    return d.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
 function renderCalendar() {
@@ -397,6 +420,7 @@ function renderList() {
         const status = mapStatusToFrontend(task.status);
         const isOverdue = task.dueDate && status !== 'done' && new Date(task.dueDate) < new Date();
         const project = getProject(task.projectId);
+        const completedTime = (status === 'done' && task.completedAt) ? formatCompletedDateTime(task.completedAt) : '-';
         return `
             <tr>
                 <td>
@@ -411,6 +435,7 @@ function renderList() {
                 </td>
                 <td><span class="list-priority ${task.priority}">${task.priority.toUpperCase()}</span></td>
                 <td class="list-due ${isOverdue ? 'overdue' : ''}">${task.dueDate ? formatDate(task.dueDate) : '-'}</td>
+                <td class="list-completed">${completedTime}</td>
                 <td class="list-actions">
                     <button class="task-action-btn move-btn" onclick="moveTask(${task.id}, '${status}')">${getNextStatusLabel(status)}</button>
                     <button class="task-action-btn delete-btn" onclick="deleteTaskConfirm(${task.id})">Delete</button>
@@ -511,7 +536,8 @@ function renderTasks(tasks) {
             task.dueDate,
             frontendStatus,
             task.description,
-            task.projectId
+            task.projectId,
+            task.completedAt
         );
         if (frontendStatus === 'todo') {
             todoList.appendChild(listItem);
@@ -527,7 +553,7 @@ function renderTasks(tasks) {
     document.getElementById('doneCount').textContent = doneList.children.length;
 }
 
-function createTaskElement(taskId, taskText, priority, dueDate, status, description, projectId) {
+function createTaskElement(taskId, taskText, priority, dueDate, status, description, projectId, completedAt) {
     const listItem = document.createElement('li');
     listItem.className = `task-card ${priority}`;
 
@@ -574,6 +600,15 @@ function createTaskElement(taskId, taskText, priority, dueDate, status, descript
     }
     metaDiv.appendChild(countdown);
     listItem.appendChild(metaDiv);
+
+    // Show completed time for done tasks
+    if (status === 'done' && completedAt) {
+        const completedTime = document.createElement('div');
+        completedTime.className = 'task-completed';
+        const formattedTime = formatCompletedDateTime(completedAt);
+        completedTime.textContent = `✓ Completed ${formattedTime}`;
+        listItem.appendChild(completedTime);
+    }
 
     const buttonDiv = document.createElement('div');
     buttonDiv.className = 'task-actions';
@@ -1277,6 +1312,12 @@ function renderLlmSyncStatus() {
     container.innerHTML = html;
 }
 
+// Helper to check if task is not expired
+function isNotExpired(task) {
+    if (!task.dueDate) return true;
+    return new Date(task.dueDate) >= new Date().setHours(0, 0, 0, 0);
+}
+
 function renderDashboard() {
     const filtered = getFilteredTasks();
     updateStats(filtered);
@@ -1291,8 +1332,11 @@ function renderDashboard() {
         });
     }
 
-    // Recent Tasks
+    // Recent Tasks - only high priority, non-expired, non-completed tasks
     const recentTasks = [...filtered]
+        .filter(t => mapStatusToFrontend(t.status) !== 'done')
+        .filter(t => t.priority === 'high')
+        .filter(t => isNotExpired(t))
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, 8);
 
@@ -1316,9 +1360,11 @@ function renderDashboard() {
     // Important Emails (unread and high importance first)
     renderRecentEmails();
 
-    // Upcoming Deadlines
+    // Upcoming Deadlines - only high priority, non-expired tasks
     const upcomingTasks = filtered
         .filter(t => t.dueDate && mapStatusToFrontend(t.status) !== 'done')
+        .filter(t => t.priority === 'high')
+        .filter(t => isNotExpired(t))
         .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
         .slice(0, 8);
 
@@ -1370,15 +1416,25 @@ function renderRecentEmails() {
         return;
     }
 
-    const emailsHtml = emailsToShow.map(email => `
+    // Helper to get recipient email from providerType
+    const getRecipientEmail = (providerType) => {
+        if (!syncStatusData) return providerType || 'email';
+        const status = syncStatusData.find(s => s.provider === providerType);
+        return status?.userEmail || providerType || 'email';
+    };
+
+    const emailsHtml = emailsToShow.map(email => {
+        const recipientEmail = getRecipientEmail(email.providerType);
+        return `
         <div class="dash-task-item ${email.isRead ? '' : 'unread'}" onclick="switchToEmail(${email.id})">
             <div class="dash-task-title">${escapeHtml(email.subject)}</div>
             <div class="dash-task-meta">
-                <span class="dash-task-project" style="--project-color: #3b82f6">${escapeHtml(email.fromName || email.from)}</span>
+                <span class="dash-task-project" style="--project-color: #3b82f6">From: ${escapeHtml(email.fromName || email.from)}</span>
+                <span style="font-size: 12px; color: var(--text-tertiary); background: var(--bg-tertiary); padding: 2px 8px; border-radius: 4px;">To: ${escapeHtml(recipientEmail)}</span>
                 <span class="dash-task-due">${formatEmailDate(email.receivedAt)}</span>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 
     container.innerHTML = emailsHtml;
 }

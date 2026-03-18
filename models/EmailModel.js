@@ -1,6 +1,7 @@
 const { readDB, writeDB } = require('../db');
 const emailConfig = require('../config/emailProviders');
 const OutlookProvider = require('../emailProviders/OutlookProvider');
+const dataCleanupService = require('../services/DataCleanupService');
 
 // Provider instances cache
 const providerInstances = {};
@@ -183,6 +184,13 @@ async function syncEmails(providerType) {
     }
 
     updateSyncState(providerType, updateData);
+
+    // Clean up old emails after sync
+    try {
+        dataCleanupService.cleanupOldEmails();
+    } catch (error) {
+        console.error('Error cleaning up old emails after sync:', error);
+    }
 
     return newCount;
 }
