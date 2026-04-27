@@ -2,4 +2,8 @@ node_modules/
 .DS_Store
 *.log
 board.json
+board.json.bak
+aether.db
+aether.db-wal
+aether.db-shm
 .env

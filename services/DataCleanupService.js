@@ -1,10 +1,6 @@
-/**
- * Data Cleanup Service
- * Handles periodic cleanup of old data to prevent database bloat
- */
-
-const { readDB, writeDB } = require('../db');
+const { getDb } = require('../db');
 const retentionConfig = require('../config/dataRetention');
+const log = require('../utils/logger');
 
 class DataCleanupService {
     constructor() {
@@ -12,283 +8,157 @@ class DataCleanupService {
         this.lastFullCleanup = null;
     }
 
-    /**
-     * Clean up old emails based on retention policy
-     * @returns {number} Number of emails removed
-     */
     cleanupOldEmails() {
-        const db = readDB();
+        const db = getDb();
         const config = retentionConfig.emails;
         const now = new Date();
-        const initialCount = db.emails.length;
+        const maxAgeDate = new Date(now.getTime() - config.maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+        const convertedMaxAgeDate = new Date(now.getTime() - config.keepConvertedMaxAgeDays * 24 * 60 * 60 * 1000).toISOString();
 
-        if (initialCount === 0) return 0;
+        const totalCount = db.prepare('SELECT COUNT(*) as cnt FROM emails').get().cnt;
+        if (totalCount === 0) return 0;
 
-        // Sort emails by received date (newest first)
-        const sortedEmails = [...db.emails].sort((a, b) =>
-            new Date(b.receivedAt) - new Date(a.receivedAt)
-        );
+        // Keep newest maxCount emails + those within age limits
+        // Delete emails that are: beyond maxCount AND older than maxAge AND (not converted or converted beyond keepConvertedMaxAge)
+        const result = db.prepare(`
+            DELETE FROM emails WHERE id NOT IN (
+                SELECT id FROM emails ORDER BY receivedAt DESC LIMIT ?
+            ) AND receivedAt < ? AND (convertedToTask = 0 OR receivedAt < ?)
+        `).run(config.maxCount, maxAgeDate, convertedMaxAgeDate);
 
-        const keptEmails = [];
-        const maxAgeDate = new Date(now.getTime() - config.maxAgeDays * 24 * 60 * 60 * 1000);
-        const convertedMaxAgeDate = new Date(now.getTime() - config.keepConvertedMaxAgeDays * 24 * 60 * 60 * 1000);
-
-        for (let i = 0; i < sortedEmails.length; i++) {
-            const email = sortedEmails[i];
-            const receivedDate = new Date(email.receivedAt);
-
-            // Always keep the first N emails regardless of age
-            if (i < config.maxCount) {
-                keptEmails.push(email);
-                continue;
-            }
-
-            // Check if email should be kept based on age
-            if (email.convertedToTask && config.keepConvertedToTask) {
-                if (receivedDate >= convertedMaxAgeDate) {
-                    keptEmails.push(email);
-                    continue;
-                }
-            } else if (receivedDate >= maxAgeDate) {
-                keptEmails.push(email);
-                continue;
-            }
-
-            // Otherwise, remove the email
+        if (result.changes > 0) {
+            log.info(`Cleaned up ${result.changes} old emails`);
         }
-
-        if (keptEmails.length !== initialCount) {
-            db.emails = keptEmails;
-            writeDB(db);
-            console.log(`Cleaned up ${initialCount - keptEmails.length} old emails`);
-        }
-
-        return initialCount - keptEmails.length;
+        return result.changes;
     }
 
-    /**
-     * Clean up old calendar events
-     * @returns {number} Number of events removed
-     */
     cleanupOldEvents() {
-        const db = readDB();
+        const db = getDb();
         const config = retentionConfig.events;
-        const now = new Date();
-        const initialCount = db.events.length;
+        const now = new Date().toISOString();
+        const keepPastDate = new Date(Date.now() - config.keepPastDays * 24 * 60 * 60 * 1000).toISOString();
 
-        if (initialCount === 0) return 0;
-
-        const keepPastDate = new Date(now.getTime() - config.keepPastDays * 24 * 60 * 60 * 1000);
-
-        db.events = db.events.filter(event => {
-            const eventEnd = new Date(event.end);
-
-            // Keep all future events
-            if (config.keepFuture && eventEnd >= now) {
-                return true;
-            }
-
-            // Keep recent past events
-            return eventEnd >= keepPastDate;
-        });
-
-        const removedCount = initialCount - db.events.length;
-        if (removedCount > 0) {
-            writeDB(db);
-            console.log(`Cleaned up ${removedCount} old events`);
+        const result = db.prepare('DELETE FROM events WHERE end < ?').run(keepPastDate);
+        if (result.changes > 0) {
+            log.info(`Cleaned up ${result.changes} old events`);
         }
-
-        return removedCount;
+        return result.changes;
     }
 
-    /**
-     * Clean up old triggered reminders
-     * @returns {number} Number of reminders removed
-     */
     cleanupOldReminders() {
-        const db = readDB();
+        const db = getDb();
         const config = retentionConfig.reminders;
-        const now = new Date();
-        const initialCount = db.reminders.length;
+        const keepTriggeredDate = new Date(Date.now() - config.keepTriggeredDays * 24 * 60 * 60 * 1000).toISOString();
 
-        if (initialCount === 0) return 0;
+        const result = db.prepare(
+            'DELETE FROM reminders WHERE triggered = 1 AND COALESCE(triggeredAt, createdAt) < ?'
+        ).run(keepTriggeredDate);
 
-        const keepTriggeredDate = new Date(now.getTime() - config.keepTriggeredDays * 24 * 60 * 60 * 1000);
-
-        db.reminders = db.reminders.filter(reminder => {
-            // Keep non-triggered reminders
-            if (!reminder.triggered) {
-                return true;
-            }
-
-            // Keep recently triggered reminders
-            const triggeredAt = reminder.triggeredAt
-                ? new Date(reminder.triggeredAt)
-                : new Date(reminder.createdAt);
-
-            return triggeredAt >= keepTriggeredDate;
-        });
-
-        const removedCount = initialCount - db.reminders.length;
-        if (removedCount > 0) {
-            writeDB(db);
-            console.log(`Cleaned up ${removedCount} old reminders`);
+        if (result.changes > 0) {
+            log.info(`Cleaned up ${result.changes} old reminders`);
         }
-
-        return removedCount;
+        return result.changes;
     }
 
-    /**
-     * Clean up old email filter results
-     * @returns {number} Number of filters removed
-     */
     cleanupOldEmailFilters() {
-        const db = readDB();
+        const db = getDb();
         const config = retentionConfig.emailFilters;
-        const initialCount = db.emailFilters.length;
 
-        if (initialCount === 0) return 0;
+        const result = db.prepare(`
+            DELETE FROM email_filters WHERE id NOT IN (
+                SELECT id FROM email_filters ORDER BY id DESC LIMIT ?
+            )
+        `).run(config.maxCount);
 
-        if (initialCount > config.maxCount) {
-            // Keep the newest N filters
-            db.emailFilters = db.emailFilters.slice(-config.maxCount);
-            writeDB(db);
-            console.log(`Cleaned up ${initialCount - config.maxCount} old email filters`);
-            return initialCount - config.maxCount;
+        if (result.changes > 0) {
+            log.info(`Cleaned up ${result.changes} old email filters`);
         }
-
-        return 0;
+        return result.changes;
     }
 
-    /**
-     * Clean up old completed tasks (optional, disabled by default)
-     * @param {number} olderThanDays - Optional override for days to keep
-     * @returns {number} Number of tasks removed
-     */
     cleanupCompletedTasks(olderThanDays = null) {
-        const db = readDB();
         const config = retentionConfig.completedTasks;
+        if (!config.enabled && olderThanDays === null) return 0;
 
-        // Only run if enabled or explicitly called with days
-        if (!config.enabled && olderThanDays === null) {
-            return 0;
-        }
-
+        const db = getDb();
         const daysToKeep = olderThanDays || config.keepDays;
-        const now = new Date();
-        const keepDate = new Date(now.getTime() - daysToKeep * 24 * 60 * 60 * 1000);
-        const initialCount = db.tasks.length;
+        const keepDate = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000).toISOString();
 
-        if (initialCount === 0) return 0;
+        const completed = db.prepare(
+            'SELECT id FROM tasks WHERE status = ? AND COALESCE(updatedAt, createdAt) < ?'
+        ).all('donecontainer', keepDate);
 
-        const completedTaskIds = new Set();
+        if (completed.length === 0) return 0;
 
-        db.tasks = db.tasks.filter(task => {
-            if (task.status !== 'donecontainer') {
-                return true;
-            }
+        const ids = completed.map(t => t.id);
+        const placeholders = ids.map(() => '?').join(',');
 
-            const updatedAt = new Date(task.updatedAt || task.createdAt);
-            if (updatedAt >= keepDate) {
-                return true;
-            }
-
-            completedTaskIds.add(task.id);
-            return false;
+        const cleanup = db.transaction(() => {
+            db.prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`).run(...ids);
+            db.prepare(`DELETE FROM reminders WHERE taskId IN (${placeholders})`).run(...ids);
         });
+        cleanup();
 
-        // Also remove reminders for deleted tasks
-        if (completedTaskIds.size > 0) {
-            db.reminders = db.reminders.filter(r => !completedTaskIds.has(r.taskId));
-        }
-
-        const removedCount = initialCount - db.tasks.length;
-        if (removedCount > 0) {
-            writeDB(db);
-            console.log(`Cleaned up ${removedCount} old completed tasks`);
-        }
-
-        return removedCount;
+        log.info(`Cleaned up ${ids.length} old completed tasks`);
+        return ids.length;
     }
 
-    /**
-     * Run light cleanup (runs hourly)
-     * Quick cleanup operations that don't take much time
-     */
     runLightCleanup() {
-        console.log('Running light data cleanup...');
+        log.info('Running light data cleanup...');
         let totalRemoved = 0;
-
         try {
             totalRemoved += this.cleanupOldReminders();
             totalRemoved += this.cleanupOldEmailFilters();
         } catch (error) {
-            console.error('Error during light cleanup:', error);
+            log.error('Error during light cleanup', { error: error.message });
         }
-
         this.lastLightCleanup = new Date();
-        console.log(`Light cleanup complete. Total removed: ${totalRemoved} items`);
+        log.info(`Light cleanup complete. Total removed: ${totalRemoved} items`);
         return totalRemoved;
     }
 
-    /**
-     * Run full cleanup (runs daily)
-     * More comprehensive cleanup operations
-     */
     runFullCleanup() {
-        console.log('Running full data cleanup...');
+        log.info('Running full data cleanup...');
         let totalRemoved = 0;
-
         try {
             totalRemoved += this.cleanupOldEmails();
             totalRemoved += this.cleanupOldEvents();
             totalRemoved += this.cleanupOldReminders();
             totalRemoved += this.cleanupOldEmailFilters();
-
-            // Only run completed task cleanup if enabled
             if (retentionConfig.completedTasks.enabled) {
                 totalRemoved += this.cleanupCompletedTasks();
             }
         } catch (error) {
-            console.error('Error during full cleanup:', error);
+            log.error('Error during full cleanup', { error: error.message });
         }
-
         this.lastFullCleanup = new Date();
-        console.log(`Full cleanup complete. Total removed: ${totalRemoved} items`);
+        log.info(`Full cleanup complete. Total removed: ${totalRemoved} items`);
         return totalRemoved;
     }
 
-    /**
-     * Run initial cleanup on service start
-     */
     runInitialCleanup() {
-        console.log('Running initial data cleanup...');
+        log.info('Running initial data cleanup...');
         return this.runFullCleanup();
     }
 
-    /**
-     * Get cleanup status
-     */
     getStatus() {
-        const db = readDB();
+        const db = getDb();
         return {
             lastLightCleanup: this.lastLightCleanup,
             lastFullCleanup: this.lastFullCleanup,
             currentCounts: {
-                emails: db.emails.length,
-                events: db.events.length,
-                reminders: db.reminders.length,
-                emailFilters: db.emailFilters.length,
-                tasks: db.tasks.length,
-                activityLog: db.activityLog.length,
-                apiUsage: db.apiUsage.length,
-                llmUsage: (db.llmUsage || []).length
+                emails: db.prepare('SELECT COUNT(*) as cnt FROM emails').get().cnt,
+                events: db.prepare('SELECT COUNT(*) as cnt FROM events').get().cnt,
+                reminders: db.prepare('SELECT COUNT(*) as cnt FROM reminders').get().cnt,
+                emailFilters: db.prepare('SELECT COUNT(*) as cnt FROM email_filters').get().cnt,
+                tasks: db.prepare('SELECT COUNT(*) as cnt FROM tasks').get().cnt,
+                activityLog: db.prepare('SELECT COUNT(*) as cnt FROM activity_log').get().cnt,
+                apiUsage: db.prepare('SELECT COUNT(*) as cnt FROM api_usage').get().cnt,
+                llmUsage: db.prepare('SELECT COUNT(*) as cnt FROM llm_usage').get().cnt
             }
         };
     }
 }
 
-// Create singleton instance
 const dataCleanupService = new DataCleanupService();
-
 module.exports = dataCleanupService;

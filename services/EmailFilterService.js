@@ -1,19 +1,10 @@
-/**
- * Token-efficient AI Email Filtering Service
- * Uses minimal tokens by:
- * - Only sending subject + short preview (not full body)
- * - Concise prompt with binary output
- * - Caching results
- */
-
-const { readDB, writeDB } = require('../db');
+const { getDb } = require('../db');
 const axios = require('axios');
 const LlmUsageModel = require('../models/LlmUsageModel');
+const log = require('../utils/logger');
 
-// Cache to avoid re-filtering the same email
 const filterCache = new Map();
 
-// Important keywords for quick heuristic filtering (token-free)
 const IMPORTANT_KEYWORDS = [
     'urgent', 'asap', 'important', 'critical', 'priority',
     'meeting', 'deadline', 'action required', 'please review',
@@ -33,51 +24,38 @@ const UNIMPORTANT_KEYWORDS = [
     'thank you for your order', 'your order has shipped'
 ];
 
-/**
- * Quick heuristic check (token-free) to avoid unnecessary LLM calls
- */
 function heuristicFilter(email) {
     const subject = (email.subject || '').toLowerCase();
     const preview = (email.bodyPreview || '').toLowerCase();
     const from = (email.from || '').toLowerCase();
     const importance = (email.importance || '').toLowerCase();
 
-    // High priority from email provider
     if (importance === 'high') {
         return { important: true, reason: 'provider_flagged_high', confidence: 0.9 };
     }
 
-    // Check for obvious important patterns
     const hasImportantKeyword = IMPORTANT_KEYWORDS.some(kw =>
         subject.includes(kw) || preview.includes(kw)
     );
-
     if (hasImportantKeyword) {
         return { important: true, reason: 'keyword_match', confidence: 0.7 };
     }
 
-    // Check for obvious unimportant patterns
     const hasUnimportantKeyword = UNIMPORTANT_KEYWORDS.some(kw =>
         subject.includes(kw) || preview.includes(kw) || from.includes(kw)
     );
-
     if (hasUnimportantKeyword) {
         return { important: false, reason: 'spam_keyword', confidence: 0.8 };
     }
 
-    // Uncertain - needs LLM judgment
     return { important: null, reason: 'needs_llm', confidence: 0 };
 }
 
-/**
- * Build a minimal, token-efficient prompt for LLM
- */
 function buildFilterPrompt(email) {
     const subject = (email.subject || '(no subject)').substring(0, 100);
     const preview = (email.bodyPreview || '').substring(0, 150);
     const sender = email.fromName || email.from || '(unknown sender)';
 
-    // Extremely concise prompt - uses minimal tokens
     return `CLASSIFY AS IMPORTANT (true/false):
 From: ${sender}
 Subject: ${subject}
@@ -86,37 +64,23 @@ Preview: ${preview}
 Only respond with JSON: {"important": true/false}`;
 }
 
-/**
- * Call LLM to filter email (token-efficient)
- */
 async function callLLMForFilter(email) {
-    // Check if we have API config in env
     const apiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
     const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1/messages';
-    const model = process.env.ANTHROPIC_MODEL || 'claude-haiku-20240307';
+    const model = process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307';
 
     if (!apiKey) {
-        console.log('No LLM API key found, using heuristic only');
+        log.info('No LLM API key found, using heuristic only');
         return { important: false, reason: 'no_llm_key', confidence: 0.5 };
     }
 
     const prompt = buildFilterPrompt(email);
 
-    let success = false;
-    let tokensUsed = null;
-
     try {
-        // Using Volcano Engine Ark (Doubao) or Anthropic API
         const apiUrl = baseUrl.includes('/v1/messages') ? baseUrl : `${baseUrl}/v1/messages`;
-
         const response = await axios.post(apiUrl, {
-            model: model,
-            max_tokens: 50, // Minimal output
-            temperature: 0,
-            messages: [{
-                role: 'user',
-                content: prompt
-            }]
+            model, max_tokens: 50, temperature: 0,
+            messages: [{ role: 'user', content: prompt }]
         }, {
             headers: {
                 'x-api-key': apiKey,
@@ -125,25 +89,17 @@ async function callLLMForFilter(email) {
             }
         });
 
-        success = true;
-        tokensUsed = response.data.usage?.total_tokens || null;
-
+        const tokensUsed = response.data.usage?.total_tokens || null;
         const content = response.data.content[0]?.text || '';
 
-        // Parse the response
         try {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const result = JSON.parse(jsonMatch[0]);
                 LlmUsageModel.logLlmCall('volcano', model, '/messages', 'POST', true, tokensUsed);
-                return {
-                    important: result.important === true,
-                    reason: 'llm_classified',
-                    confidence: 0.85
-                };
+                return { important: result.important === true, reason: 'llm_classified', confidence: 0.85 };
             }
         } catch (e) {
-            // Fallback: look for true/false
             if (content.toLowerCase().includes('true')) {
                 LlmUsageModel.logLlmCall('volcano', model, '/messages', 'POST', true, tokensUsed);
                 return { important: true, reason: 'llm_parsed', confidence: 0.7 };
@@ -154,36 +110,27 @@ async function callLLMForFilter(email) {
         return { important: false, reason: 'llm_fallback', confidence: 0.5 };
 
     } catch (error) {
-        console.error('LLM call failed:', error.message);
+        log.error('LLM call failed', { error: error.message });
         LlmUsageModel.logLlmCall('volcano', model, '/messages', 'POST', false, null);
         return { important: false, reason: 'llm_error', confidence: 0.5 };
     }
 }
 
-/**
- * Main filter function - combines heuristic + LLM
- */
 async function filterEmail(email) {
     const cacheKey = email.providerId || email.id;
 
-    // Check cache first
     if (cacheKey && filterCache.has(cacheKey)) {
         return filterCache.get(cacheKey);
     }
 
-    // First try heuristic (token-free)
     let result = heuristicFilter(email);
 
-    // If uncertain and not cached, use LLM
     if (result.important === null) {
         result = await callLLMForFilter(email);
     }
 
-    // Cache the result
     if (cacheKey) {
         filterCache.set(cacheKey, result);
-
-        // Limit cache size
         if (filterCache.size > 1000) {
             const firstKey = filterCache.keys().next().value;
             filterCache.delete(firstKey);
@@ -193,12 +140,8 @@ async function filterEmail(email) {
     return result;
 }
 
-/**
- * Batch filter emails (optimized)
- */
 async function filterEmails(emails) {
     const results = [];
-
     for (const email of emails) {
         const result = await filterEmail(email);
         results.push({
@@ -208,49 +151,32 @@ async function filterEmails(emails) {
             filterConfidence: result.confidence
         });
     }
-
     return results;
 }
 
-/**
- * Get important emails only
- */
 async function getImportantEmails(emails) {
     const filtered = await filterEmails(emails);
     return filtered.filter(e => e.important);
 }
 
-/**
- * Persist filter results to database
- */
 function saveFilterResults(emailId, result) {
-    const db = readDB();
-    const existing = db.emailFilters?.find(f => f.emailId === emailId);
-
-    const filterEntry = {
-        emailId,
-        important: result.important,
-        reason: result.reason,
-        confidence: result.confidence,
-        filteredAt: new Date().toISOString()
-    };
+    const db = getDb();
+    const existing = db.prepare('SELECT id FROM email_filters WHERE emailId = ?').get(emailId);
 
     if (existing) {
-        Object.assign(existing, filterEntry);
+        db.prepare('UPDATE email_filters SET important = ?, reason = ?, confidence = ?, filteredAt = ? WHERE id = ?')
+            .run(result.important ? 1 : 0, result.reason, result.confidence, new Date().toISOString(), existing.id);
     } else {
-        if (!db.emailFilters) db.emailFilters = [];
-        db.emailFilters.push(filterEntry);
+        db.prepare('INSERT INTO email_filters (emailId, important, reason, confidence, filteredAt) VALUES (?, ?, ?, ?, ?)')
+            .run(emailId, result.important ? 1 : 0, result.reason, result.confidence, new Date().toISOString());
     }
-
-    writeDB(db);
 }
 
-/**
- * Get cached filter result from database
- */
 function getCachedFilterResult(emailId) {
-    const db = readDB();
-    return db.emailFilters?.find(f => f.emailId === emailId);
+    const db = getDb();
+    const row = db.prepare('SELECT * FROM email_filters WHERE emailId = ?').get(emailId);
+    if (!row) return null;
+    return { ...row, important: !!row.important };
 }
 
 module.exports = {

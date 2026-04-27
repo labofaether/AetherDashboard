@@ -8,6 +8,7 @@ const EmailProviderInterface = require('./EmailProviderInterface');
 const axios = require('axios');
 const querystring = require('querystring');
 const ApiUsageModel = require('../models/ApiUsageModel');
+const log = require('../utils/logger');
 
 class OutlookProvider extends EmailProviderInterface {
     constructor(config) {
@@ -30,7 +31,7 @@ class OutlookProvider extends EmailProviderInterface {
             scope: this.config.scopes.join(' '),
             state: state,
             response_mode: 'query',
-            access_type: 'offline'
+            prompt: 'consent'
         });
         return `https://login.microsoftonline.com/${this.config.credentials.tenantId}/oauth2/v2.0/authorize?${params}`;
     }
@@ -53,7 +54,7 @@ class OutlookProvider extends EmailProviderInterface {
                 expiresAt: this.tokenExpiresAt
             };
         } catch (error) {
-            console.error('OutlookProvider handleCallback error:', error.response?.data || error.message);
+            log.error('OutlookProvider handleCallback error:', error.response?.data || error.message);
             throw error;
         }
     }
@@ -69,7 +70,7 @@ class OutlookProvider extends EmailProviderInterface {
         try {
             ApiUsageModel.logApiCall('outlook', endpoint, method, success);
         } catch (e) {
-            console.error('Failed to log API call:', e);
+            log.error('Failed to log API call:', e);
         }
     }
 
@@ -86,7 +87,8 @@ class OutlookProvider extends EmailProviderInterface {
             client_secret: this.config.credentials.clientSecret,
             grant_type: 'authorization_code',
             code: code,
-            redirect_uri: this.config.credentials.redirectUri
+            redirect_uri: this.config.credentials.redirectUri,
+            scope: this.config.scopes.join(' ')
         });
 
         try {
@@ -119,7 +121,8 @@ class OutlookProvider extends EmailProviderInterface {
                 client_id: this.config.credentials.clientId,
                 client_secret: this.config.credentials.clientSecret,
                 grant_type: 'refresh_token',
-                refresh_token: this.refreshToken
+                refresh_token: this.refreshToken,
+                scope: this.config.scopes.join(' ')
             });
 
             const response = await axios.post(url, data, {
@@ -136,7 +139,7 @@ class OutlookProvider extends EmailProviderInterface {
             return true;
         } catch (error) {
             this._logApiCall('/oauth2/token', 'POST', false);
-            console.error('OutlookProvider refresh token error:', error.response?.data || error.message);
+            log.error('OutlookProvider refresh token error:', error.response?.data || error.message);
             this.isAuthenticated = false;
             throw error;
         }
@@ -207,7 +210,7 @@ class OutlookProvider extends EmailProviderInterface {
             return response.data.value.map(email => this.normalizeEmail(email));
         } catch (error) {
             this._logApiCall('/me/messages', 'GET', false);
-            console.error('OutlookProvider fetchEmails error:', error.response?.data || error.message);
+            log.error('OutlookProvider fetchEmails error:', error.response?.data || error.message);
             throw error;
         }
     }
@@ -236,7 +239,7 @@ class OutlookProvider extends EmailProviderInterface {
             return response.data.value.map(event => this.normalizeEvent(event));
         } catch (error) {
             this._logApiCall('/me/calendarView', 'GET', false);
-            console.error('OutlookProvider fetchEvents error:', error.response?.data || error.message);
+            log.error('OutlookProvider fetchEvents error:', error.response?.data || error.message);
             throw error;
         }
     }
@@ -260,7 +263,7 @@ class OutlookProvider extends EmailProviderInterface {
             return this.normalizeEmail(response.data);
         } catch (error) {
             this._logApiCall('/me/messages/{id}', 'GET', false);
-            console.error('OutlookProvider getEmail error:', error.response?.data || error.message);
+            log.error('OutlookProvider getEmail error:', error.response?.data || error.message);
             throw error;
         }
     }
@@ -288,7 +291,7 @@ class OutlookProvider extends EmailProviderInterface {
             return true;
         } catch (error) {
             this._logApiCall('/me/messages/{id}', 'PATCH', false);
-            console.error('OutlookProvider markAsRead error:', error.response?.data || error.message);
+            log.error('OutlookProvider markAsRead error:', error.response?.data || error.message);
             throw error;
         }
     }
@@ -312,7 +315,7 @@ class OutlookProvider extends EmailProviderInterface {
             return true;
         } catch (error) {
             this._logApiCall('/me/messages/{id}', 'DELETE', false);
-            console.error('OutlookProvider deleteEmail error:', error.response?.data || error.message);
+            log.error('OutlookProvider deleteEmail error:', error.response?.data || error.message);
             throw error;
         }
     }
@@ -357,7 +360,7 @@ class OutlookProvider extends EmailProviderInterface {
             return true;
         } catch (error) {
             this._logApiCall('/me/sendMail', 'POST', false);
-            console.error('OutlookProvider sendEmail error:', error.response?.data || error.message);
+            log.error('OutlookProvider sendEmail error:', error.response?.data || error.message);
             throw error;
         }
     }
@@ -453,7 +456,7 @@ class OutlookProvider extends EmailProviderInterface {
                     }
                 }
             } catch (e) {
-                console.warn('Failed to decode token, falling back to API call');
+                log.warn('Failed to decode token, falling back to API call');
             }
         }
 
@@ -475,7 +478,7 @@ class OutlookProvider extends EmailProviderInterface {
             };
         } catch (error) {
             this._logApiCall('/me', 'GET', false);
-            console.error('OutlookProvider getUserProfile error:', error.response?.data || error.message);
+            log.error('OutlookProvider getUserProfile error:', error.response?.data || error.message);
             throw error;
         }
     }

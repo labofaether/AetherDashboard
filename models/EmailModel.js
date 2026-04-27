@@ -1,7 +1,9 @@
-const { readDB, writeDB } = require('../db');
+const { getDb } = require('../db');
 const emailConfig = require('../config/emailProviders');
 const OutlookProvider = require('../emailProviders/OutlookProvider');
 const dataCleanupService = require('../services/DataCleanupService');
+const log = require('../utils/logger');
+const { encrypt, decrypt } = require('../utils/encryption');
 
 // Provider instances cache
 const providerInstances = {};
@@ -12,9 +14,7 @@ function getProviderInstance(type) {
     }
 
     const config = emailConfig.getProvider(type);
-    if (!config) {
-        throw new Error(`Provider ${type} not found`);
-    }
+    if (!config) throw new Error(`Provider ${type} not found`);
 
     let provider;
     switch (type) {
@@ -30,109 +30,166 @@ function getProviderInstance(type) {
 }
 
 // Email Functions
-function getAllEmails(filters = {}) {
-    const db = readDB();
-    let emails = [...db.emails];
+function buildEmailFilterClause(filters) {
+    let sql = '';
+    const params = [];
+    if (filters.providerType) { sql += ' AND providerType = ?'; params.push(filters.providerType); }
+    if (filters.isRead !== undefined) { sql += ' AND isRead = ?'; params.push(filters.isRead ? 1 : 0); }
+    if (filters.projectId) { sql += ' AND projectId = ?'; params.push(filters.projectId); }
+    return { sql, params };
+}
 
-    if (filters.providerType) emails = emails.filter(e => e.providerType === filters.providerType);
-    if (filters.isRead !== undefined) emails = emails.filter(e => e.isRead === filters.isRead);
-    if (filters.projectId) emails = emails.filter(e => e.projectId === filters.projectId);
+// `opts.limit` / `opts.offset` are honored when present; called without opts the
+// signature stays backwards-compatible (returns the full result set, used by
+// internal callers that pass the array to in-memory filtering).
+function getAllEmails(filters = {}, opts = {}) {
+    const db = getDb();
+    const { sql: whereSql, params } = buildEmailFilterClause(filters);
+    let sql = 'SELECT * FROM emails WHERE 1=1' + whereSql + ' ORDER BY receivedAt DESC';
+    if (Number.isInteger(opts.limit) && opts.limit > 0) {
+        sql += ' LIMIT ?';
+        params.push(opts.limit);
+        if (Number.isInteger(opts.offset) && opts.offset > 0) {
+            sql += ' OFFSET ?';
+            params.push(opts.offset);
+        }
+    }
+    return db.prepare(sql).all(...params).map(rowToEmail);
+}
 
-    return emails.sort((a, b) => new Date(b.receivedAt) - new Date(a.receivedAt));
+function countEmails(filters = {}) {
+    const db = getDb();
+    const { sql: whereSql, params } = buildEmailFilterClause(filters);
+    return db.prepare('SELECT COUNT(*) AS n FROM emails WHERE 1=1' + whereSql).get(...params).n;
+}
+
+function rowToEmail(row) {
+    if (!row) return null;
+    return { ...row, isRead: !!row.isRead, convertedToTask: !!row.convertedToTask, hasAttachments: !!row.hasAttachments };
 }
 
 function getEmailById(id) {
-    const db = readDB();
-    return db.emails.find(e => e.id === id) || null;
+    const db = getDb();
+    return rowToEmail(db.prepare('SELECT * FROM emails WHERE id = ?').get(id));
 }
 
 function saveEmail(emailData) {
-    const db = readDB();
-    const existing = db.emails.find(e => e.providerId === emailData.providerId && e.providerType === emailData.providerType);
+    const db = getDb();
+    const existing = db.prepare('SELECT id FROM emails WHERE providerId = ? AND providerType = ?')
+        .get(emailData.providerId, emailData.providerType);
     if (existing) return existing.id;
 
-    const newId = db.emails.length > 0 ? Math.max(...db.emails.map(e => e.id)) + 1 : 1;
-    const email = {
-        id: newId,
-        ...emailData,
-        convertedToTask: false,
-        taskId: null,
-        projectId: null,
-        createdAt: new Date().toISOString()
-    };
-
-    db.emails.unshift(email);
-    writeDB(db);
-    return newId;
+    const now = new Date().toISOString();
+    const result = db.prepare(`
+        INSERT INTO emails (providerId, providerType, subject, "from", fromName, bodyPreview,
+            receivedAt, isRead, importance, hasAttachments, webLink, convertedToTask, taskId, projectId, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, ?)
+    `).run(
+        emailData.providerId, emailData.providerType, emailData.subject,
+        emailData.from, emailData.fromName, emailData.bodyPreview,
+        emailData.receivedAt, emailData.isRead ? 1 : 0, emailData.importance,
+        emailData.hasAttachments ? 1 : 0, emailData.webLink,
+        now, now
+    );
+    return result.lastInsertRowid;
 }
 
 function updateEmail(id, updates) {
-    const db = readDB();
-    const email = db.emails.find(e => e.id === id);
-    if (!email) return false;
-    Object.assign(email, updates, { updatedAt: new Date().toISOString() });
-    writeDB(db);
-    return true;
+    const db = getDb();
+    const sets = [];
+    const values = [];
+    for (const [key, val] of Object.entries(updates)) {
+        const col = key === 'from' ? '"from"' : key;
+        if (typeof val === 'boolean') {
+            sets.push(`${col} = ?`); values.push(val ? 1 : 0);
+        } else {
+            sets.push(`${col} = ?`); values.push(val);
+        }
+    }
+    sets.push('updatedAt = ?');
+    values.push(new Date().toISOString());
+    values.push(id);
+
+    const result = db.prepare(`UPDATE emails SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    return result.changes > 0;
 }
 
 function deleteEmail(id) {
-    const db = readDB();
-    const initialLength = db.emails.length;
-    db.emails = db.emails.filter(e => e.id !== id);
-    if (db.emails.length !== initialLength) {
-        writeDB(db);
-        return true;
-    }
-    return false;
+    const db = getDb();
+    const del = db.transaction(() => {
+        db.prepare('DELETE FROM email_filters WHERE emailId = ?').run(id);
+        return db.prepare('DELETE FROM emails WHERE id = ?').run(id);
+    });
+    const result = del();
+    return result.changes > 0;
 }
 
 // Calendar Event Functions
 function getAllEvents(filters = {}) {
-    const db = readDB();
-    let events = [...db.events];
+    const db = getDb();
+    let sql = 'SELECT * FROM events WHERE 1=1';
+    const params = [];
 
-    if (filters.startDateTime) {
-        events = events.filter(e => new Date(e.end) >= new Date(filters.startDateTime));
-    }
-    if (filters.endDateTime) {
-        events = events.filter(e => new Date(e.start) <= new Date(filters.endDateTime));
-    }
+    if (filters.startDateTime) { sql += ' AND end >= ?'; params.push(filters.startDateTime); }
+    if (filters.endDateTime) { sql += ' AND start <= ?'; params.push(filters.endDateTime); }
 
-    return events.sort((a, b) => new Date(a.start) - new Date(b.start));
+    sql += ' ORDER BY start ASC';
+    return db.prepare(sql).all(...params).map(r => ({ ...r, isAllDay: !!r.isAllDay }));
 }
 
 function saveEvent(eventData) {
-    const db = readDB();
-    const existing = db.events.find(e => e.providerId === eventData.providerId && e.providerType === eventData.providerType);
+    const db = getDb();
+    const existing = db.prepare('SELECT id FROM events WHERE providerId = ? AND providerType = ?')
+        .get(eventData.providerId, eventData.providerType);
     if (existing) return existing.id;
 
-    const newId = db.events.length > 0 ? Math.max(...db.events.map(e => e.id)) + 1 : 1;
-    const event = {
-        id: newId,
-        ...eventData,
-        createdAt: new Date().toISOString()
-    };
-
-    db.events.push(event);
-    writeDB(db);
-    return newId;
+    const result = db.prepare(`
+        INSERT INTO events (providerId, providerType, subject, start, end, location, isAllDay,
+            organizer, organizerEmail, bodyPreview, webLink, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        eventData.providerId, eventData.providerType, eventData.subject,
+        eventData.start, eventData.end, eventData.location,
+        eventData.isAllDay ? 1 : 0, eventData.organizer, eventData.organizerEmail,
+        eventData.bodyPreview, eventData.webLink,
+        new Date().toISOString()
+    );
+    return result.lastInsertRowid;
 }
 
 // Sync State Functions
 function getSyncState(providerType) {
-    const db = readDB();
-    return db.emailSyncState.find(s => s.providerType === providerType) || null;
+    const db = getDb();
+    const row = db.prepare('SELECT * FROM email_sync_state WHERE providerType = ?').get(providerType);
+    if (!row) return null;
+    return { ...row, connected: !!row.connected, tokens: row.tokens ? decrypt(row.tokens) : null };
 }
 
 function updateSyncState(providerType, state) {
-    const db = readDB();
-    let syncState = db.emailSyncState.find(s => s.providerType === providerType);
-    if (!syncState) {
-        syncState = { providerType };
-        db.emailSyncState.push(syncState);
+    const db = getDb();
+    const existing = db.prepare('SELECT id FROM email_sync_state WHERE providerType = ?').get(providerType);
+
+    const sets = [];
+    const values = [];
+    for (const [key, val] of Object.entries(state)) {
+        if (key === 'tokens') {
+            sets.push('tokens = ?'); values.push(val ? encrypt(val) : null);
+        } else if (typeof val === 'boolean') {
+            sets.push(`${key} = ?`); values.push(val ? 1 : 0);
+        } else {
+            sets.push(`${key} = ?`); values.push(val);
+        }
     }
-    Object.assign(syncState, state, { updatedAt: new Date().toISOString() });
-    writeDB(db);
+    sets.push('updatedAt = ?');
+    values.push(new Date().toISOString());
+
+    if (existing) {
+        values.push(providerType);
+        db.prepare(`UPDATE email_sync_state SET ${sets.join(', ')} WHERE providerType = ?`).run(...values);
+    } else {
+        db.prepare(`INSERT INTO email_sync_state (providerType, ${sets.map(s => s.split(' = ')[0]).join(', ')}) VALUES (?, ${values.map(() => '?').join(', ')})`)
+            .run(providerType, ...values);
+    }
 }
 
 function saveProviderTokens(providerType, tokens) {
@@ -144,52 +201,53 @@ function getProviderTokens(providerType) {
     return state?.tokens || null;
 }
 
+// Persist refreshed tokens after a provider operation. Provider may have rotated
+// the access token via refresh_token internally; without this call those rotated
+// tokens are lost on next sync.
+function persistRefreshedTokens(providerType, provider) {
+    try {
+        const fresh = provider.getTokenData?.();
+        if (fresh) saveProviderTokens(providerType, fresh);
+    } catch (e) {
+        log.warn('Failed to persist refreshed tokens', { providerType, error: e.message });
+    }
+}
+
 // Sync Functions
 async function syncEmails(providerType) {
     const provider = getProviderInstance(providerType);
     const tokens = getProviderTokens(providerType);
-
     if (!tokens) throw new Error('Provider not authenticated');
 
     await provider.authenticate(tokens);
 
-    // Get user profile (optional)
     let userProfile = null;
     try {
         userProfile = await provider.getUserProfile();
     } catch (error) {
-        console.warn('Failed to get user profile, continuing without it:', error.message);
+        log.warn('Failed to get user profile, continuing without it', { error: error.message });
     }
 
-    const syncState = getSyncState(providerType);
-    const lastSyncAt = syncState?.lastEmailSyncAt;
-
+    const state = getSyncState(providerType);
+    const lastSyncAt = state?.lastEmailSyncAt;
     const emails = await provider.fetchEmails({ limit: 100, since: lastSyncAt });
 
     let newCount = 0;
     for (const email of emails) {
-        const id = saveEmail(email);
-        const savedEmail = getEmailById(id);
-        if (savedEmail && savedEmail.createdAt === savedEmail.updatedAt) newCount++;
+        saveEmail(email);
+        newCount++;
     }
 
-    const updateData = {
-        lastEmailSyncAt: new Date().toISOString(),
-        connected: true
-    };
-
+    const updateData = { lastEmailSyncAt: new Date().toISOString(), connected: true };
     if (userProfile) {
         updateData.userEmail = userProfile.email;
         updateData.userDisplayName = userProfile.displayName;
     }
-
     updateSyncState(providerType, updateData);
+    persistRefreshedTokens(providerType, provider);
 
-    // Clean up old emails after sync
-    try {
-        dataCleanupService.cleanupOldEmails();
-    } catch (error) {
-        console.error('Error cleaning up old emails after sync:', error);
+    try { dataCleanupService.cleanupOldEmails(); } catch (error) {
+        log.error('Error cleaning up old emails after sync', { error: error.message });
     }
 
     return newCount;
@@ -198,24 +256,19 @@ async function syncEmails(providerType) {
 async function syncEvents(providerType) {
     const provider = getProviderInstance(providerType);
     const tokens = getProviderTokens(providerType);
-
     if (!tokens) throw new Error('Provider not authenticated');
 
     await provider.authenticate(tokens);
-
     const events = await provider.fetchEvents({ limit: 100 });
 
     let newCount = 0;
     for (const event of events) {
-        const id = saveEvent(event);
+        saveEvent(event);
         newCount++;
     }
 
-    updateSyncState(providerType, {
-        lastEventSyncAt: new Date().toISOString(),
-        connected: true
-    });
-
+    updateSyncState(providerType, { lastEventSyncAt: new Date().toISOString(), connected: true });
+    persistRefreshedTokens(providerType, provider);
     return newCount;
 }
 
@@ -240,7 +293,7 @@ async function markAsRead(id, isRead = true) {
                 saveProviderTokens(email.providerType, provider.getTokenData());
             }
         } catch (error) {
-            console.error('Error marking email as read on provider:', error);
+            log.error('Error marking email as read on provider', { error: error.message });
         }
     }
 
@@ -248,27 +301,31 @@ async function markAsRead(id, isRead = true) {
 }
 
 async function markAllAsRead(providerType = null) {
-    const db = readDB();
-    const unreadEmails = db.emails.filter(e => !e.isRead && (!providerType || e.providerType === providerType));
+    const db = getDb();
+    let sql = 'SELECT * FROM emails WHERE isRead = 0';
+    const params = [];
+    if (providerType) { sql += ' AND providerType = ?'; params.push(providerType); }
 
-    // 1. 立即更新本地状态（快速响应用户）
-    for (const email of unreadEmails) {
-        updateEmail(email.id, { isRead: true });
-    }
+    const unreadEmails = db.prepare(sql).all(...params).map(rowToEmail);
 
-    // 2. 后台异步更新 provider（不阻塞）
+    // Immediately update local state
+    const updateSql = providerType
+        ? 'UPDATE emails SET isRead = 1, updatedAt = ? WHERE isRead = 0 AND providerType = ?'
+        : 'UPDATE emails SET isRead = 1, updatedAt = ? WHERE isRead = 0';
+    const updateParams = providerType ? [new Date().toISOString(), providerType] : [new Date().toISOString()];
+    db.prepare(updateSql).run(...updateParams);
+
+    // Background sync to provider
     (async () => {
         let provider = null;
-        let tokens = null;
         let currentProviderType = null;
 
         for (const email of unreadEmails) {
             if (email.providerId && email.providerType) {
                 try {
-                    // 复用 provider 实例和 token，避免重复认证
                     if (email.providerType !== currentProviderType) {
                         currentProviderType = email.providerType;
-                        tokens = getProviderTokens(currentProviderType);
+                        const tokens = getProviderTokens(currentProviderType);
                         if (tokens) {
                             provider = getProviderInstance(currentProviderType);
                             await provider.authenticate(tokens);
@@ -276,24 +333,15 @@ async function markAllAsRead(providerType = null) {
                             provider = null;
                         }
                     }
-
-                    if (provider) {
-                        await provider.markAsRead(email.providerId, true);
-                    }
+                    if (provider) await provider.markAsRead(email.providerId, true);
                 } catch (error) {
-                    console.error(`Error marking email ${email.id} as read on provider:`, error);
-                    // 继续处理其他邮件
+                    log.error('Error marking email as read on provider', { emailId: email.id, error: error.message });
                 }
             }
         }
 
-        // 最后保存一次 token
         if (provider && currentProviderType) {
-            try {
-                saveProviderTokens(currentProviderType, provider.getTokenData());
-            } catch (e) {
-                // ignore
-            }
+            try { saveProviderTokens(currentProviderType, provider.getTokenData()); } catch (e) { /* ignore */ }
         }
     })();
 
@@ -313,18 +361,13 @@ function convertToTask(emailId, taskOptions = {}) {
     const projectId = taskOptions.projectId || null;
 
     const taskId = TaskModel.createTask(title, description, priority, dueDate, status, projectId);
-
-    updateEmail(emailId, {
-        convertedToTask: true,
-        taskId,
-        projectId
-    });
-
+    updateEmail(emailId, { convertedToTask: true, taskId, projectId });
     return taskId;
 }
 
 module.exports = {
     getAllEmails,
+    countEmails,
     getEmailById,
     saveEmail,
     updateEmail,

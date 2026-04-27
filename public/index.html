@@ -10,6 +10,7 @@
     <div class="app-container">
         <header class="top-nav">
             <div class="nav-left">
+                <button class="hamburger" id="hamburgerBtn" title="Toggle sidebar">&#9776;</button>
                 <div class="status-indicator">
                     <div class="status-dot"></div>
                     <span class="status-text">Online</span>
@@ -39,11 +40,13 @@
             </nav>
             <div class="nav-right">
                 <div class="current-time" id="currentTime">--:--:--</div>
+                <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">&#9789;</button>
             </div>
         </header>
 
         <div class="main-layout">
-            <aside class="sidebar">
+            <div class="sidebar-overlay" id="sidebarOverlay"></div>
+            <aside class="sidebar" id="sidebar">
                 <div class="sidebar-section">
                     <div class="sidebar-header">
                         <h3 class="sidebar-title">Projects</h3>
@@ -58,6 +61,19 @@
                             <span class="project-count" id="allCount">0</span>
                         </div>
                     </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <ul class="nav-list">
+                        <li class="nav-item" data-module="today">
+                            <span class="nav-icon">&#9733;</span>
+                            <span class="nav-label">Today</span>
+                        </li>
+                        <li class="nav-item" data-module="focus">
+                            <span class="nav-icon">&#9201;</span>
+                            <span class="nav-label">Focus</span>
+                        </li>
+                    </ul>
                 </div>
 
                 <div class="sidebar-section activity-log">
@@ -100,6 +116,29 @@
                                 <div class="stat-label">Overdue</div>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="weekly-review-section" id="weeklyReviewSection">
+                        <h3 class="section-title">Weekly Review</h3>
+                        <div class="weekly-stats-grid">
+                            <div class="weekly-stat-card">
+                                <span class="weekly-stat-value" id="weeklyCompleted">0</span>
+                                <span class="weekly-stat-label">Completed This Week</span>
+                            </div>
+                            <div class="weekly-stat-card">
+                                <span class="weekly-stat-value" id="weeklyCreated">0</span>
+                                <span class="weekly-stat-label">Created This Week</span>
+                            </div>
+                            <div class="weekly-stat-card">
+                                <span class="weekly-stat-value" id="weeklyStreak">0</span>
+                                <span class="weekly-stat-label">Day Streak</span>
+                            </div>
+                            <div class="weekly-stat-card">
+                                <span class="weekly-stat-value" id="weeklyFocusTime">0m</span>
+                                <span class="weekly-stat-label">Focus Time</span>
+                            </div>
+                        </div>
+                        <div class="weekly-chart" id="weeklyChart"></div>
                     </div>
 
                     <div class="dashboard-content">
@@ -153,6 +192,16 @@
                                 </div>
                                 <div class="sync-status" id="llmSyncStatus"></div>
                             </div>
+
+                            <div class="dashboard-section">
+                                <div class="section-header">
+                                    <h3 class="section-title">Daily Papers</h3>
+                                    <button class="icon-btn-small" id="syncPapersBtn" title="Sync Papers">
+                                        <span>🔄</span>
+                                    </button>
+                                </div>
+                                <div class="daily-papers" id="dailyPapers"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -163,15 +212,27 @@
                             <input type="text" id="taskInput" placeholder="What needs to be done?" class="task-input">
                             <div class="input-options">
                                 <input type="datetime-local" id="dueDateInput" class="date-input">
+                                <select id="recurSelect" class="task-input-field" title="Recurring">
+                                    <option value="">No Repeat</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
                                 <select id="prioritySelect" class="priority-select">
                                     <option value="low">Low</option>
                                     <option value="medium" selected>Medium</option>
                                     <option value="high">High</option>
                                 </select>
                                 <button id="addTaskButton" class="add-button">Add Task</button>
+                                <button class="btn-secondary" id="useTemplateBtn" title="Use Template">Template</button>
                             </div>
                         </div>
                         <p id="errormessage" class="error-message"></p>
+                    </div>
+
+                    <div class="board-view-toggle">
+                        <button class="view-toggle-btn active" id="kanbanViewBtn" data-view="kanban">Kanban</button>
+                        <button class="view-toggle-btn" id="eisenhowerViewBtn" data-view="eisenhower">Eisenhower</button>
                     </div>
 
                     <div class="board">
@@ -203,6 +264,29 @@
                                 </button>
                             </div>
                             <ul id="doneList" class="task-list"></ul>
+                        </div>
+                    </div>
+
+                    <div class="eisenhower-grid hidden" id="eisenhowerGrid">
+                        <div class="eq-quadrant eq-urgent-important" data-urgent="1" data-important="1">
+                            <div class="eq-header">Do First</div>
+                            <div class="eq-subtitle">Urgent & Important</div>
+                            <ul class="eq-task-list" id="eqDoFirst"></ul>
+                        </div>
+                        <div class="eq-quadrant eq-not-urgent-important" data-urgent="0" data-important="1">
+                            <div class="eq-header">Schedule</div>
+                            <div class="eq-subtitle">Not Urgent & Important</div>
+                            <ul class="eq-task-list" id="eqSchedule"></ul>
+                        </div>
+                        <div class="eq-quadrant eq-urgent-not-important" data-urgent="1" data-important="0">
+                            <div class="eq-header">Delegate</div>
+                            <div class="eq-subtitle">Urgent & Not Important</div>
+                            <ul class="eq-task-list" id="eqDelegate"></ul>
+                        </div>
+                        <div class="eq-quadrant eq-not-urgent-not-important" data-urgent="0" data-important="0">
+                            <div class="eq-header">Eliminate</div>
+                            <div class="eq-subtitle">Not Urgent & Not Important</div>
+                            <ul class="eq-task-list" id="eqEliminate"></ul>
                         </div>
                     </div>
                 </div>
@@ -280,6 +364,80 @@
                         </div>
                     </div>
                 </div>
+
+                <div id="todayView" class="module-view hidden">
+                    <div class="today-header">
+                        <h2 class="module-title">Today</h2>
+                        <span class="today-date" id="todayDate"></span>
+                    </div>
+
+                    <div class="today-grid">
+                        <div class="today-column today-main">
+                            <div class="today-section">
+                                <h3 class="section-title">Pinned Tasks <button class="icon-btn-small" id="pinTaskBtn" title="Pin a task">+</button></h3>
+                                <div id="todayPinned" class="today-task-list"></div>
+                            </div>
+                            <div class="today-section">
+                                <h3 class="section-title">Overdue</h3>
+                                <div id="todayOverdue" class="today-task-list"></div>
+                            </div>
+                            <div class="today-section">
+                                <h3 class="section-title">Due Soon</h3>
+                                <div id="todayDueSoon" class="today-task-list"></div>
+                            </div>
+                        </div>
+
+                        <div class="today-column today-side">
+                            <div class="today-section">
+                                <h3 class="section-title">Scratchpad</h3>
+                                <div id="scratchpadNotes" class="notes-grid"></div>
+                                <button class="btn-secondary" id="addNoteBtn">+ Add Note</button>
+                            </div>
+                            <div class="today-section">
+                                <h3 class="section-title">Goals</h3>
+                                <div id="goalsList" class="goals-list"></div>
+                                <button class="btn-secondary" id="addGoalBtn">+ Add Goal</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="focusView" class="module-view hidden">
+                    <div class="focus-container">
+                        <div class="focus-timer-section">
+                            <div class="focus-task-label" id="focusTaskLabel">No task selected</div>
+                            <select id="focusTaskSelect" class="focus-select">
+                                <option value="">Select a task to focus on...</option>
+                            </select>
+                            <div class="focus-timer-display" id="focusTimerDisplay">25:00</div>
+                            <div class="focus-timer-controls">
+                                <button class="focus-preset" data-minutes="15">15m</button>
+                                <button class="focus-preset active" data-minutes="25">25m</button>
+                                <button class="focus-preset" data-minutes="45">45m</button>
+                                <button class="focus-preset" data-minutes="60">60m</button>
+                            </div>
+                            <div class="focus-actions">
+                                <button class="btn-primary focus-btn" id="focusStartBtn">Start Focus</button>
+                                <button class="btn-secondary focus-btn" id="focusResetBtn" style="display:none">Reset</button>
+                            </div>
+                        </div>
+                        <div class="focus-stats-section">
+                            <h3 class="section-title">Today's Focus</h3>
+                            <div class="focus-today-stats" id="focusTodayStats">
+                                <div class="focus-stat">
+                                    <span class="focus-stat-value" id="focusTotalTime">0m</span>
+                                    <span class="focus-stat-label">Total Focus</span>
+                                </div>
+                                <div class="focus-stat">
+                                    <span class="focus-stat-value" id="focusSessions">0</span>
+                                    <span class="focus-stat-label">Sessions</span>
+                                </div>
+                            </div>
+                            <h3 class="section-title">Recent Sessions</h3>
+                            <div id="focusHistory" class="focus-history"></div>
+                        </div>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -341,6 +499,126 @@
         </div>
     </div>
 
+    <!-- Template Modal -->
+    <div class="modal hidden" id="templateModal">
+        <div class="modal-content">
+            <h2>Task Templates</h2>
+            <div id="templateList" class="template-list"></div>
+            <div class="template-create">
+                <input type="text" id="templateName" placeholder="Template name..." maxlength="200">
+                <textarea id="templateSubtasks" placeholder="Subtasks (one per line)..." rows="4"></textarea>
+                <select id="templatePriority">
+                    <option value="medium">Medium Priority</option>
+                    <option value="low">Low Priority</option>
+                    <option value="high">High Priority</option>
+                </select>
+                <button class="btn-primary" id="saveTemplateBtn">Save Template</button>
+            </div>
+            <button class="modal-close" id="closeTemplateModal">&times;</button>
+        </div>
+    </div>
+
+    <!-- Goal Modal -->
+    <div class="modal hidden" id="goalModal">
+        <div class="modal-content">
+            <h2>Add Goal</h2>
+            <input type="text" id="goalTitle" placeholder="Goal title..." maxlength="200">
+            <input type="date" id="goalTargetDate">
+            <input type="number" id="goalTargetCount" placeholder="Target count" min="1" value="1">
+            <select id="goalCategory">
+                <option value="general">General</option>
+                <option value="research">Research</option>
+                <option value="coursework">Coursework</option>
+                <option value="health">Health</option>
+            </select>
+            <div class="modal-actions">
+                <button class="btn-secondary" id="cancelGoalBtn">Cancel</button>
+                <button class="btn-primary" id="saveGoalBtn">Save</button>
+            </div>
+            <button class="modal-close" id="closeGoalModal">&times;</button>
+        </div>
+    </div>
+
+    <!-- Command Palette -->
+    <div id="commandPalette" class="command-palette hidden">
+        <div class="command-palette-content">
+            <input type="text" id="commandInput" class="command-input" placeholder="Search tasks, emails, papers..." autocomplete="off">
+            <div id="commandResults" class="command-results"></div>
+            <div class="command-footer">
+                <span class="command-hint"><kbd>Esc</kbd> close</span>
+                <span class="command-hint"><kbd>&#8593;&#8595;</kbd> navigate</span>
+                <span class="command-hint"><kbd>Enter</kbd> select</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Help -->
+    <div id="shortcutsHelp" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Keyboard Shortcuts</h2>
+                <button class="close-button" onclick="document.getElementById('shortcutsHelp').classList.add('hidden')">&times;</button>
+            </div>
+            <div class="shortcuts-grid">
+                <div class="shortcut-row"><kbd>Ctrl+K</kbd><span>Search</span></div>
+                <div class="shortcut-row"><kbd>Ctrl+N</kbd><span>New task</span></div>
+                <div class="shortcut-row"><kbd>Ctrl+Z</kbd><span>Undo</span></div>
+                <div class="shortcut-row"><kbd>Ctrl+Shift+Z</kbd><span>Redo</span></div>
+                <div class="shortcut-row"><kbd>1-5</kbd><span>Switch modules</span></div>
+                <div class="shortcut-row"><kbd>Esc</kbd><span>Close modal</span></div>
+                <div class="shortcut-row"><kbd>?</kbd><span>This help</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirmDialog" class="modal hidden">
+        <div class="modal-content confirm-dialog">
+            <div class="modal-header">
+                <h2 class="modal-title" id="confirmTitle">Confirm</h2>
+            </div>
+            <p id="confirmMessage" class="confirm-message"></p>
+            <div class="confirm-actions">
+                <button id="confirmCancel" class="confirm-btn confirm-btn-cancel">Cancel</button>
+                <button id="confirmOk" class="confirm-btn confirm-btn-danger">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <!-- Bulk Action Bar -->
+    <div id="bulkBar" class="bulk-bar hidden">
+        <span class="bulk-count" id="bulkCount">0 selected</span>
+        <button class="bulk-btn" onclick="bulkMove('todocontainer')">To Do</button>
+        <button class="bulk-btn" onclick="bulkMove('doingcontainer')">In Progress</button>
+        <button class="bulk-btn" onclick="bulkMove('donecontainer')">Done</button>
+        <button class="bulk-btn danger" onclick="bulkDelete()">Delete</button>
+        <button class="bulk-btn" onclick="exitBulkMode()">Cancel</button>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <button class="quick-capture-btn" id="quickCaptureBtn" title="Quick Capture (Ctrl+Q)">+</button>
+    <div class="quick-capture-modal hidden" id="quickCaptureModal">
+        <input type="text" id="quickCaptureInput" placeholder="Quick capture a task..." maxlength="500" autocomplete="off">
+        <div class="quick-capture-actions">
+            <select id="quickCapturePriority">
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="high">High</option>
+            </select>
+            <button class="btn-primary" id="quickCaptureSave">Add</button>
+        </div>
+    </div>
+
     <script src="script.js"></script>
+    <script src="js/quickCapture.js"></script>
+    <script src="js/focusMode.js"></script>
+    <script src="js/todayView.js"></script>
+    <script src="js/weeklyReview.js"></script>
+    <script src="js/eisenhower.js"></script>
+    <script src="js/stickyNotes.js"></script>
+    <script src="js/goalTracking.js"></script>
+    <script src="js/taskTemplates.js"></script>
 </body>
 </html>

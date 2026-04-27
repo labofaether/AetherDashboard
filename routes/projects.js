@@ -1,4 +1,5 @@
 const express = require('express');
+const { z } = require('zod');
 const {
     getAllProjects,
     getProjectById,
@@ -6,19 +7,38 @@ const {
     updateProject,
     deleteProject
 } = require('../models/ProjectModel');
+const { validate } = require('../middleware/validate');
+const { validateIdParam } = require('../middleware/validateIdParam');
+const log = require('../utils/logger');
 const router = express.Router();
+
+// Hex color only — front-end injects color into inline style="background: ${color}",
+// so any unsanitized string here lets a malicious value break out of the property.
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'color must be a 6-digit hex (e.g. #10a37f)');
+
+const createProjectSchema = z.object({
+    name: z.string().min(1, 'Project name is required').max(200),
+    color: hexColor.optional(),
+    description: z.string().max(2000).default(''),
+});
+
+const updateProjectSchema = z.object({
+    name: z.string().min(1).max(200).optional(),
+    color: hexColor.optional(),
+    description: z.string().max(2000).optional(),
+});
 
 router.get('/', (req, res) => {
     try {
         const projects = getAllProjects();
         res.json(projects);
     } catch (err) {
-        console.error('Error fetching projects:', err.message);
+        log.error('Error fetching projects', { error: err.message });
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', validateIdParam(), (req, res) => {
     try {
         const projectId = parseInt(req.params.id);
         const project = getProjectById(projectId);
@@ -28,28 +48,24 @@ router.get('/:id', (req, res) => {
             res.status(404).json({ error: 'Project not found' });
         }
     } catch (err) {
-        console.error('Error fetching project:', err.message);
+        log.error('Error fetching project', { error: err.message });
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(createProjectSchema), (req, res) => {
     const { name, color, description } = req.body;
-
-    if (!name || !name.trim()) {
-        return res.status(400).json({ error: 'Project name is required' });
-    }
 
     try {
         const projectId = createProject(name.trim(), color, description || '');
         res.status(201).json({ message: 'Project created', projectId });
     } catch (err) {
-        console.error('Error creating project:', err.message);
+        log.error('Error creating project', { error: err.message });
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', validateIdParam(), validate(updateProjectSchema), (req, res) => {
     const projectId = parseInt(req.params.id);
     const { name, color, description } = req.body;
 
@@ -61,12 +77,12 @@ router.put('/:id', (req, res) => {
             res.status(404).json({ error: 'Project not found' });
         }
     } catch (err) {
-        console.error('Error updating project:', err.message);
+        log.error('Error updating project', { error: err.message });
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', validateIdParam(), (req, res) => {
     const projectId = parseInt(req.params.id);
 
     try {
@@ -77,7 +93,7 @@ router.delete('/:id', (req, res) => {
             res.status(404).json({ error: 'Project not found' });
         }
     } catch (err) {
-        console.error('Error deleting project:', err.message);
+        log.error('Error deleting project', { error: err.message });
         res.status(500).json({ error: 'Internal server error' });
     }
 });

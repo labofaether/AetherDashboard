@@ -1,35 +1,26 @@
-const { readDB, writeDB } = require('../db');
+const { getDb } = require('../db');
 
 function logLlmCall(provider, model, endpoint, method, success = true, tokensUsed = null) {
-    const db = readDB();
-    const entry = {
-        id: db.llmUsage && db.llmUsage.length > 0 ? Math.max(...db.llmUsage.map(e => e.id)) + 1 : 1,
-        provider,
-        model,
-        endpoint,
-        method,
-        success,
-        tokensUsed,
-        timestamp: new Date().toISOString()
-    };
+    const db = getDb();
+    const now = new Date().toISOString();
+    const result = db.prepare(
+        'INSERT INTO llm_usage (provider, model, endpoint, method, success, tokensUsed, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(provider, model, endpoint, method, success ? 1 : 0, tokensUsed, now);
 
-    if (!db.llmUsage) db.llmUsage = [];
-    db.llmUsage.push(entry);
+    // Keep only last 1000
+    db.prepare(`
+        DELETE FROM llm_usage WHERE id NOT IN (
+            SELECT id FROM llm_usage ORDER BY id DESC LIMIT 1000
+        )
+    `).run();
 
-    if (db.llmUsage.length > 1000) {
-        db.llmUsage = db.llmUsage.slice(-1000);
-    }
-
-    writeDB(db);
-    return entry;
+    return { id: result.lastInsertRowid, provider, model, endpoint, method, success, tokensUsed, timestamp: now };
 }
 
 function getLlmStats(hours = 24) {
-    const db = readDB();
-    if (!db.llmUsage) db.llmUsage = [];
-
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-    const recent = db.llmUsage.filter(e => new Date(e.timestamp) >= since);
+    const db = getDb();
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const recent = db.prepare('SELECT * FROM llm_usage WHERE timestamp >= ?').all(since);
 
     const stats = {
         totalCalls: recent.length,
@@ -51,18 +42,14 @@ function getLlmStats(hours = 24) {
     for (let i = hours - 1; i >= 0; i--) {
         const hourStart = new Date(Date.now() - i * 60 * 60 * 1000);
         const hourEnd = new Date(Date.now() - (i - 1) * 60 * 60 * 1000);
-        const count = recent.filter(e => {
+        const filtered = recent.filter(e => {
             const t = new Date(e.timestamp);
             return t >= hourStart && t < hourEnd;
-        }).length;
-        const tokens = recent.filter(e => {
-            const t = new Date(e.timestamp);
-            return t >= hourStart && t < hourEnd && e.tokensUsed;
-        }).reduce((sum, e) => sum + e.tokensUsed, 0);
+        });
         stats.callsByHour.push({
             hour: hourStart.getHours(),
-            count,
-            tokens
+            count: filtered.length,
+            tokens: filtered.filter(e => e.tokensUsed).reduce((sum, e) => sum + e.tokensUsed, 0)
         });
     }
 
@@ -70,33 +57,30 @@ function getLlmStats(hours = 24) {
 }
 
 function getLlmSyncStatus() {
-    const db = readDB();
-    if (!db.llmUsage) db.llmUsage = [];
-
+    const db = getDb();
+    const total = db.prepare('SELECT COUNT(*) as cnt FROM llm_usage').get().cnt;
     const now = Date.now();
-    const fiveHoursAgo = now - 5 * 60 * 60 * 1000;
-    const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-    const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
 
-    const usageInWindow = (startTime) => {
-        const calls = db.llmUsage.filter(e => new Date(e.timestamp) >= startTime);
-        const tokens = calls.filter(e => e.tokensUsed).reduce((sum, e) => sum + e.tokensUsed, 0);
-        return { calls: calls.length, tokens };
-    };
+    function usageInWindow(ms) {
+        const since = new Date(now - ms).toISOString();
+        const calls = db.prepare('SELECT COUNT(*) as cnt FROM llm_usage WHERE timestamp >= ?').get(since).cnt;
+        const tokens = db.prepare('SELECT COALESCE(SUM(tokensUsed), 0) as total FROM llm_usage WHERE timestamp >= ? AND tokensUsed IS NOT NULL').get(since).total;
+        return { calls, tokens };
+    }
 
-    const recent = db.llmUsage.slice(-10);
-    const lastCall = db.llmUsage.length > 0 ? db.llmUsage[db.llmUsage.length - 1] : null;
+    const recent = db.prepare('SELECT * FROM llm_usage ORDER BY id DESC LIMIT 10').all();
+    const lastCall = recent[0] || null;
 
     return {
-        totalCalls: db.llmUsage.length,
+        totalCalls: total,
         lastCallAt: lastCall?.timestamp || null,
         recentSuccessRate: recent.length > 0
             ? (recent.filter(e => e.success).length / recent.length * 100).toFixed(1) + '%'
             : 'N/A',
         recentCalls: recent.length,
-        fiveHourUsage: usageInWindow(fiveHoursAgo),
-        weeklyUsage: usageInWindow(oneWeekAgo),
-        monthlyUsage: usageInWindow(oneMonthAgo)
+        fiveHourUsage: usageInWindow(5 * 60 * 60 * 1000),
+        weeklyUsage: usageInWindow(7 * 24 * 60 * 60 * 1000),
+        monthlyUsage: usageInWindow(30 * 24 * 60 * 60 * 1000)
     };
 }
 

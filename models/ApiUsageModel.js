@@ -1,30 +1,27 @@
-const { readDB, writeDB } = require('../db');
+const { getDb } = require('../db');
 
 function logApiCall(provider, endpoint, method, success = true) {
-    const db = readDB();
-    const entry = {
-        id: db.apiUsage.length > 0 ? Math.max(...db.apiUsage.map(e => e.id)) + 1 : 1,
-        provider,
-        endpoint,
-        method,
-        success,
-        timestamp: new Date().toISOString()
-    };
-    db.apiUsage.push(entry);
+    const db = getDb();
+    const now = new Date().toISOString();
+    const result = db.prepare(
+        'INSERT INTO api_usage (provider, endpoint, method, success, timestamp) VALUES (?, ?, ?, ?, ?)'
+    ).run(provider, endpoint, method, success ? 1 : 0, now);
 
-    if (db.apiUsage.length > 1000) {
-        db.apiUsage = db.apiUsage.slice(-1000);
-    }
+    // Keep only last 1000
+    db.prepare(`
+        DELETE FROM api_usage WHERE id NOT IN (
+            SELECT id FROM api_usage ORDER BY id DESC LIMIT 1000
+        )
+    `).run();
 
-    writeDB(db);
-    return entry;
+    return { id: result.lastInsertRowid, provider, endpoint, method, success, timestamp: now };
 }
 
 function getApiStats(hours = 24) {
-    const db = readDB();
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const db = getDb();
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
-    const recent = db.apiUsage.filter(e => new Date(e.timestamp) >= since);
+    const recent = db.prepare('SELECT * FROM api_usage WHERE timestamp >= ?').all(since);
 
     const stats = {
         totalCalls: recent.length,
@@ -47,24 +44,21 @@ function getApiStats(hours = 24) {
             const t = new Date(e.timestamp);
             return t >= hourStart && t < hourEnd;
         }).length;
-        stats.callsByHour.push({
-            hour: hourStart.getHours(),
-            count
-        });
+        stats.callsByHour.push({ hour: hourStart.getHours(), count });
     }
 
     return stats;
 }
 
 function getSyncStatus() {
-    const db = readDB();
-    const syncStates = db.emailSyncState || [];
+    const db = getDb();
+    const syncStates = db.prepare('SELECT * FROM email_sync_state').all();
 
     return syncStates.map(state => ({
         provider: state.providerType,
-        connected: state.connected || false,
+        connected: !!state.connected,
         lastEmailSyncAt: state.lastEmailSyncAt || null,
-        emailCount: db.emails.filter(e => e.providerType === state.providerType).length,
+        emailCount: db.prepare('SELECT COUNT(*) as cnt FROM emails WHERE providerType = ?').get(state.providerType).cnt,
         userEmail: state.userEmail || null,
         userDisplayName: state.userDisplayName || null
     }));

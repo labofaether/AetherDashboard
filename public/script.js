@@ -2,6 +2,7 @@ const API_BASE = '/tasks';
 const PROJECT_API_BASE = '/projects';
 const ACTIVITY_API_BASE = '/activity';
 const EMAIL_API_BASE = '/emails';
+const PAPER_API_BASE = '/papers';
 
 let allEmails = [];
 let allEvents = [];
@@ -12,11 +13,193 @@ let emailButtonsSetup = false;
 let currentModule = 'dashboard';
 let currentProjectId = 'all';
 let allTasks = [];
+
+// --- Custom confirm dialog ---
+function showConfirm({ title = 'Confirm', message, okText = 'Delete', danger = true }) {
+    return new Promise(resolve => {
+        const dialog = document.getElementById('confirmDialog');
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMessage').textContent = message;
+        const okBtn = document.getElementById('confirmOk');
+        okBtn.textContent = okText;
+        okBtn.className = 'confirm-btn ' + (danger ? 'confirm-btn-danger' : 'confirm-btn-cancel');
+        dialog.classList.remove('hidden');
+
+        function cleanup(result) {
+            dialog.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            document.getElementById('confirmCancel').removeEventListener('click', onCancel);
+            dialog.removeEventListener('click', onBackdrop);
+            resolve(result);
+        }
+        function onOk() { cleanup(true); }
+        function onCancel() { cleanup(false); }
+        function onBackdrop(e) { if (e.target === dialog) cleanup(false); }
+
+        okBtn.addEventListener('click', onOk);
+        document.getElementById('confirmCancel').addEventListener('click', onCancel);
+        dialog.addEventListener('click', onBackdrop);
+    });
+}
+
+// --- Toast notification ---
+function showToast(message, { undoFn, duration = 2800 } = {}) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+
+    if (undoFn) {
+        const btn = document.createElement('button');
+        btn.className = 'toast-undo';
+        btn.textContent = 'Undo';
+        btn.onclick = () => {
+            undoFn();
+            toast.remove();
+        };
+        toast.appendChild(btn);
+    }
+
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), duration);
+}
+// localStorage throws in private browsing / when quota is exceeded — wrap so a
+// non-essential write never crashes the page. Reads return null on failure.
+const safeStorage = {
+    get(key) {
+        try { return localStorage.getItem(key); }
+        catch { return null; }
+    },
+    set(key, value) {
+        try { localStorage.setItem(key, value); return true; }
+        catch (e) {
+            if (!safeStorage._warned) {
+                console.warn('localStorage unavailable — preferences will not persist:', e.message);
+                safeStorage._warned = true;
+            }
+            return false;
+        }
+    },
+};
+
+// --- Dark mode toggle ---
+function initTheme() {
+    const saved = safeStorage.get('theme');
+    if (saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    updateThemeIcon();
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+        document.documentElement.removeAttribute('data-theme');
+        safeStorage.set('theme', 'light');
+    } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        safeStorage.set('theme', 'dark');
+    }
+    updateThemeIcon();
+}
+
+function updateThemeIcon() {
+    const btn = document.getElementById('themeToggle');
+    if (!btn) return;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    btn.textContent = isDark ? '\u2600' : '\u263D';
+}
+
+// --- Mobile sidebar ---
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('active');
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.remove('open');
+    overlay.classList.remove('active');
+}
+
+// --- Undo/Redo Stack (command pattern) ---
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 30;
+
+function pushUndo(cmd) {
+    undoStack.push(cmd);
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack.length = 0;
+}
+
+async function undo() {
+    const cmd = undoStack.pop();
+    if (!cmd) return showToast('Nothing to undo');
+    try {
+        await cmd.undo();
+        redoStack.push(cmd);
+        showToast(`Undo: ${cmd.label}`);
+    } catch (e) {
+        console.error('Undo failed:', e);
+        showToast('Undo failed');
+    }
+}
+
+async function redo() {
+    const cmd = redoStack.pop();
+    if (!cmd) return showToast('Nothing to redo');
+    try {
+        await cmd.redo();
+        undoStack.push(cmd);
+        showToast(`Redo: ${cmd.label}`);
+    } catch (e) {
+        console.error('Redo failed:', e);
+        showToast('Redo failed');
+    }
+}
+
+// --- Browser Notifications ---
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+function showNotification(title, body) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body, icon: '/favicon.ico' });
+    }
+}
+
+async function pollDueReminders() {
+    try {
+        const res = await fetch('/tasks/reminders/due');
+        if (!res.ok) return;
+        const data = await res.json();
+        for (const r of data.reminders || []) {
+            showNotification('Reminder', `${r.taskTitle}${r.note ? ' — ' + r.note : ''}`);
+            showToast(`Reminder: ${r.taskTitle}`);
+        }
+    } catch (e) { /* silent */ }
+}
+
+// Init theme immediately
+initTheme();
+
 let allProjects = [];
 let selectedColor = '#10a37f';
 let calendarMonth = new Date();
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Theme & sidebar
+    document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
+    document.getElementById('hamburgerBtn')?.addEventListener('click', toggleSidebar);
+    document.getElementById('sidebarOverlay')?.addEventListener('click', closeSidebar);
+
     setupModuleButtons();
     setupVideoAgentButton();
     setupProjectButtons();
@@ -25,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupCalendarButtons();
     setupListControls();
     setupColorOptions();
+    setupPaperButtons();
 
     updateCurrentTime();
     setInterval(updateCurrentTime, 1000);
@@ -37,6 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadEvents();
     loadSyncStatus();
     loadLlmSyncStatus();
+    loadDailyPapers();
     setInterval(loadActivityLog, 5000);
     setInterval(() => {
         loadEmails();
@@ -44,7 +229,13 @@ document.addEventListener('DOMContentLoaded', () => {
         loadEvents();
         loadSyncStatus();
         loadLlmSyncStatus();
+        loadDailyPapers();
     }, 60000);
+
+    // Browser notifications
+    requestNotificationPermission();
+    pollDueReminders();
+    setInterval(pollDueReminders, 60000);
 });
 
 function updateCurrentTime() {
@@ -59,7 +250,7 @@ function updateCurrentTime() {
 }
 
 function setupModuleButtons() {
-    document.querySelectorAll('.module-btn').forEach(btn => {
+    document.querySelectorAll('.module-btn, .nav-item').forEach(btn => {
         if (btn.dataset.module) {
             btn.addEventListener('click', () => {
                 switchModule(btn.dataset.module);
@@ -78,14 +269,24 @@ function setupVideoAgentButton() {
 }
 
 function switchModule(module) {
+    // Tear down per-view timers from the previous module before switching.
+    // Without this, countdowns on board cards keep ticking against detached/hidden
+    // nodes — wasted CPU and a slow leak as renderTasks pushes new ones each refresh.
+    if (currentModule !== module) {
+        _countdownIntervals.forEach(id => clearInterval(id));
+        _countdownIntervals = [];
+    }
+
     currentModule = module;
-    document.querySelectorAll('.module-btn').forEach(btn => {
+    // Support both .module-btn and .nav-item for navigation
+    document.querySelectorAll('.module-btn, .nav-item').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.module === module);
     });
     document.querySelectorAll('.module-view').forEach(view => {
         view.classList.add('hidden');
     });
-    document.getElementById(`${module}View`).classList.remove('hidden');
+    const viewEl = document.getElementById(`${module}View`);
+    if (viewEl) viewEl.classList.remove('hidden');
 
     // Setup email buttons and load emails when switching to email module
     if (module === 'email') {
@@ -100,9 +301,11 @@ function renderCurrentView() {
     switch (currentModule) {
         case 'dashboard':
             renderDashboard();
+            if (typeof loadWeeklyReview === 'function') loadWeeklyReview();
             break;
         case 'board':
             renderTasks(getFilteredTasks());
+            if (typeof renderEisenhowerView === 'function') renderEisenhowerView();
             break;
         case 'calendar':
             renderCalendar();
@@ -112,6 +315,12 @@ function renderCurrentView() {
             break;
         case 'email':
             renderEmails();
+            break;
+        case 'today':
+            if (typeof renderTodayView === 'function') renderTodayView();
+            break;
+        case 'focus':
+            if (typeof loadFocusView === 'function') loadFocusView();
             break;
     }
 }
@@ -222,6 +431,7 @@ function getProject(projectId) {
 
 function renderProjects() {
     const list = document.getElementById('projectList');
+    if (!list) return;
     let html = `
         <div class="project-item ${currentProjectId === 'all' ? 'active' : ''}" data-project-id="all">
             <span class="project-color" style="background: #10a37f"></span>
@@ -252,7 +462,7 @@ function renderProjects() {
         });
     });
 
-    document.getElementById('allCount').textContent = allTasks.length;
+    setText('allCount', allTasks.length);
 }
 
 function getFilteredTasks() {
@@ -261,6 +471,8 @@ function getFilteredTasks() {
 }
 
 async function loadTasks() {
+    const boardContainer = document.getElementById('boardView');
+    if (boardContainer) boardContainer.classList.add('loading');
     try {
         // Always load ALL tasks, filter at display time
         const response = await fetch(API_BASE);
@@ -272,6 +484,8 @@ async function loadTasks() {
         }
     } catch (err) {
         console.error('Error loading tasks:', err);
+    } finally {
+        if (boardContainer) boardContainer.classList.remove('loading');
     }
 }
 
@@ -287,10 +501,10 @@ function updateStats(tasks) {
         return new Date(t.dueDate) < new Date();
     }).length;
 
-    document.getElementById('dashTotal').textContent = filtered.length;
-    document.getElementById('dashDoing').textContent = doingCount;
-    document.getElementById('dashDone').textContent = doneCount;
-    document.getElementById('dashOverdue').textContent = overdueCount;
+    setText('dashTotal', filtered.length);
+    setText('dashDoing', doingCount);
+    setText('dashDone', doneCount);
+    setText('dashOverdue', overdueCount);
 }
 
 
@@ -313,6 +527,7 @@ function formatCompletedDateTime(dateStr) {
 function renderCalendar() {
     const grid = document.getElementById('calendarGrid');
     const title = document.getElementById('calendarTitle');
+    if (!grid || !title) return;
 
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
@@ -351,17 +566,17 @@ function renderCalendar() {
 function renderCalendarDay(day, month, year, isOtherMonth, today, tasks, events) {
     const date = new Date(year, month, day);
     const isToday = date.toDateString() === today.toDateString();
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(date);
 
     const dayTasks = tasks.filter(t => {
         if (!t.dueDate) return false;
-        const taskDate = new Date(t.dueDate).toISOString().split('T')[0];
+        const taskDate = formatLocalDate(new Date(t.dueDate));
         return taskDate === dateStr;
     });
 
     const dayEvents = (events || []).filter(e => {
         if (!e.start) return false;
-        const eventDate = new Date(e.start).toISOString().split('T')[0];
+        const eventDate = formatLocalDate(new Date(e.start));
         return eventDate === dateStr;
     });
 
@@ -392,8 +607,11 @@ function renderCalendarDay(day, month, year, isOtherMonth, today, tasks, events)
 
 function renderList() {
     const tbody = document.getElementById('listTableBody');
-    const filter = document.getElementById('listFilter').value;
-    const sort = document.getElementById('listSort').value;
+    const filterEl = document.getElementById('listFilter');
+    const sortEl = document.getElementById('listSort');
+    if (!tbody || !filterEl || !sortEl) return;
+    const filter = filterEl.value;
+    const sort = sortEl.value;
     let filtered = getFilteredTasks();
 
     if (filter !== 'all') {
@@ -518,10 +736,38 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Returns YYYY-MM-DD in the browser's local timezone.
+// `Date#toISOString().split('T')[0]` returns UTC date — wrong for users near midnight.
+function formatLocalDate(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+// Defensive DOM helpers — render functions can run before/after their target view
+// is mounted (e.g. cross-view background refresh). Silent no-op beats NPE.
+function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+function setHtml(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+}
+
+let _countdownIntervals = [];
+
 function renderTasks(tasks) {
+    // Clear previous countdown intervals to prevent memory leaks
+    _countdownIntervals.forEach(id => clearInterval(id));
+    _countdownIntervals = [];
+
     const todoList = document.getElementById('todoList');
     const doingList = document.getElementById('doingList');
     const doneList = document.getElementById('doneList');
+
+    if (!todoList || !doingList || !doneList) return;
 
     todoList.innerHTML = '';
     doingList.innerHTML = '';
@@ -539,6 +785,13 @@ function renderTasks(tasks) {
             task.projectId,
             task.completedAt
         );
+        // Add recurring badge if applicable
+        if (task.recurPattern) {
+            const badge = document.createElement('div');
+            badge.className = 'task-recurring-badge';
+            badge.innerHTML = `<span class="recur-icon">&#x21bb;</span> ${task.recurPattern}`;
+            listItem.querySelector('.task-meta')?.prepend(badge);
+        }
         if (frontendStatus === 'todo') {
             todoList.appendChild(listItem);
         } else if (frontendStatus === 'doing') {
@@ -548,14 +801,145 @@ function renderTasks(tasks) {
         }
     });
 
-    document.getElementById('todoCount').textContent = todoList.children.length;
-    document.getElementById('doingCount').textContent = doingList.children.length;
-    document.getElementById('doneCount').textContent = doneList.children.length;
+    setText('todoCount', todoList.children.length);
+    setText('doingCount', doingList.children.length);
+    setText('doneCount', doneList.children.length);
+
+    // Setup drag-and-drop on each task list
+    [todoList, doingList, doneList].forEach(setupDropZone);
+}
+
+// --- Drag and Drop ---
+function setupDropZone(listEl) {
+    listEl.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        listEl.classList.add('drag-over');
+    });
+
+    listEl.addEventListener('dragleave', () => {
+        listEl.classList.remove('drag-over');
+    });
+
+    listEl.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        listEl.classList.remove('drag-over');
+        const rawId = e.dataTransfer.getData('text/plain');
+        const taskId = parseInt(rawId, 10);
+        if (!Number.isInteger(taskId) || taskId <= 0) return;
+
+        // Determine target status from the column's data-status
+        const column = listEl.closest('.column');
+        const targetFrontend = column?.dataset.status;
+        if (!targetFrontend) return;
+
+        const targetBackend = mapStatusToBackend(targetFrontend);
+
+        // Find the task's current status
+        const task = allTasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const oldBackend = task.status;
+        if (oldBackend === targetBackend) return;
+
+        try {
+            const response = await fetch(`${API_BASE}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId, status: targetBackend }),
+            });
+            if (response.ok) {
+                pushUndo({
+                    label: 'drag move',
+                    undo: async () => {
+                        await fetch(`${API_BASE}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId, status: oldBackend }) });
+                        loadTasks(); loadActivityLog();
+                    },
+                    redo: async () => {
+                        await fetch(`${API_BASE}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId, status: targetBackend }) });
+                        loadTasks(); loadActivityLog();
+                    }
+                });
+                loadTasks();
+                loadActivityLog();
+            } else {
+                if (typeof showToast === 'function') showToast('Move failed (server rejected)', 'error');
+                loadTasks();
+            }
+        } catch (err) {
+            console.error('Error moving task:', err);
+            if (typeof showToast === 'function') showToast('Move failed (network error)', 'error');
+            loadTasks();
+        }
+    });
+}
+
+// Attach dragstart to task cards (delegated from board)
+document.addEventListener('dragstart', (e) => {
+    const card = e.target.closest?.('.task-card');
+    if (!card) return;
+    card.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', card.dataset.taskId);
+    e.dataTransfer.effectAllowed = 'move';
+});
+
+document.addEventListener('dragend', (e) => {
+    const card = e.target.closest?.('.task-card');
+    if (card) card.classList.remove('dragging');
+    document.querySelectorAll('.task-list.drag-over').forEach(el => el.classList.remove('drag-over'));
+});
+
+// --- Inline Edit Helper ---
+function startInlineEdit(element, currentValue, onSave) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'inline-edit-input';
+    input.value = currentValue;
+
+    element.style.display = 'none';
+    element.parentNode.insertBefore(input, element);
+    input.focus();
+    input.select();
+
+    let finishing = false; // re-entry guard: blur can fire while save is in flight
+    async function finish(save) {
+        if (finishing) return;
+        finishing = true;
+        const value = input.value.trim();
+        const shouldSave = save && value && value !== currentValue;
+        if (shouldSave) {
+            input.disabled = true;
+            try {
+                await onSave(value);
+                element.textContent = value;
+            } catch (err) {
+                console.error('Inline save failed:', err);
+                if (typeof showToast === 'function') showToast('Save failed', 'error');
+            }
+        }
+        input.remove();
+        element.style.display = '';
+    }
+
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        if (e.key === 'Escape') { finish(false); }
+    });
 }
 
 function createTaskElement(taskId, taskText, priority, dueDate, status, description, projectId, completedAt) {
     const listItem = document.createElement('li');
     listItem.className = `task-card ${priority}`;
+    listItem.draggable = true;
+    listItem.dataset.taskId = taskId;
+
+    // Bulk selection checkbox
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'task-checkbox';
+    checkbox.addEventListener('change', () => updateBulkSelection());
+    checkbox.addEventListener('click', (e) => e.stopPropagation());
+    listItem.appendChild(checkbox);
 
     const project = getProject(projectId);
 
@@ -572,6 +956,21 @@ function createTaskElement(taskId, taskText, priority, dueDate, status, descript
     const taskTitle = document.createElement('p');
     taskTitle.className = 'task-title';
     taskTitle.textContent = taskText;
+    taskTitle.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startInlineEdit(taskTitle, taskText, async (newTitle) => {
+            if (newTitle && newTitle !== taskText) {
+                const r = await fetch(`${API_BASE}/${taskId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: newTitle }),
+                });
+                if (!r.ok) throw new Error(`Title update failed: ${r.status}`);
+                loadTasks();
+                loadActivityLog();
+            }
+        });
+    });
     listItem.appendChild(taskTitle);
 
     const metaDiv = document.createElement('div');
@@ -594,7 +993,7 @@ function createTaskElement(taskId, taskText, priority, dueDate, status, descript
     countdown.className = 'task-countdown';
     if (dueDate) {
         updateCountdown(countdown, dueDate);
-        setInterval(() => updateCountdown(countdown, dueDate), 1000);
+        _countdownIntervals.push(setInterval(() => updateCountdown(countdown, dueDate), 1000));
     } else {
         countdown.textContent = '';
     }
@@ -610,6 +1009,12 @@ function createTaskElement(taskId, taskText, priority, dueDate, status, descript
         listItem.appendChild(completedTime);
     }
 
+    // Subtask section
+    const subtaskContainer = document.createElement('div');
+    subtaskContainer.className = 'subtask-section';
+    listItem.appendChild(subtaskContainer);
+    loadSubtasksForCard(taskId, subtaskContainer);
+
     const buttonDiv = document.createElement('div');
     buttonDiv.className = 'task-actions';
 
@@ -618,24 +1023,55 @@ function createTaskElement(taskId, taskText, priority, dueDate, status, descript
     editButton.textContent = 'Edit';
     editButton.onclick = async (e) => {
         e.stopPropagation();
-        const newDescription = prompt('Enter a description for this task:', descriptionText === 'No description added.' ? '' : descriptionText);
-        if (newDescription !== null) {
-            descriptionText = newDescription || 'No description added.';
+        // Show inline textarea for description editing
+        let existingEditor = listItem.querySelector('.inline-edit-input');
+        if (existingEditor) { existingEditor.focus(); return; }
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'inline-edit-input';
+        textarea.value = descriptionText === 'No description added.' ? '' : descriptionText;
+        textarea.rows = 3;
+        textarea.placeholder = 'Add a description...';
+
+        // Insert before buttons
+        listItem.insertBefore(textarea, buttonDiv);
+        textarea.focus();
+
+        let saving = false;
+        async function saveDesc() {
+            if (saving) return;
+            saving = true;
+            const newDesc = textarea.value.trim();
+            const original = descriptionText === 'No description added.' ? '' : descriptionText;
+            if (newDesc === original) {
+                textarea.remove();
+                return;
+            }
+            textarea.disabled = true;
             try {
-                const response = await fetch(`${API_BASE}/description`, {
+                const r = await fetch(`${API_BASE}/description`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId, description: newDescription }),
+                    body: JSON.stringify({ taskId, description: newDesc }),
                 });
-                if (!response.ok) {
-                    console.error('Failed to update description', await response.text());
-                }
+                if (!r.ok) throw new Error(`Description update failed: ${r.status}`);
+                descriptionText = newDesc || 'No description added.';
+                textarea.remove();
                 loadTasks();
                 loadActivityLog();
             } catch (err) {
                 console.error('Error updating description:', err);
+                textarea.disabled = false;
+                saving = false;
+                if (typeof showToast === 'function') showToast('Save failed, try again', 'error');
             }
         }
+
+        textarea.addEventListener('blur', saveDesc);
+        textarea.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape') { textarea.removeEventListener('blur', saveDesc); textarea.remove(); }
+            if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); textarea.removeEventListener('blur', saveDesc); saveDesc(); }
+        });
     };
     buttonDiv.appendChild(editButton);
 
@@ -664,6 +1100,7 @@ function createTaskElement(taskId, taskText, priority, dueDate, status, descript
 async function moveTask(taskId, currentStatus) {
     const newFrontendStatus = getNextStatus(currentStatus);
     const newBackendStatus = mapStatusToBackend(newFrontendStatus);
+    const oldBackendStatus = mapStatusToBackend(currentStatus);
     try {
         const response = await fetch(`${API_BASE}/status`, {
             method: 'PUT',
@@ -671,18 +1108,47 @@ async function moveTask(taskId, currentStatus) {
             body: JSON.stringify({ taskId, status: newBackendStatus }),
         });
         if (response.ok) {
+            const statusLabels = { todo: 'Backlog', doing: 'In Progress', done: 'Completed' };
+            showToast(`Task moved to ${statusLabels[newFrontendStatus] || newFrontendStatus}`, {
+                undoFn: async () => { await undo(); }
+            });
+            pushUndo({
+                label: 'status change',
+                undo: async () => {
+                    await fetch(`${API_BASE}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId, status: oldBackendStatus }) });
+                    loadTasks(); loadActivityLog();
+                },
+                redo: async () => {
+                    await fetch(`${API_BASE}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId, status: newBackendStatus }) });
+                    loadTasks(); loadActivityLog();
+                }
+            });
             loadTasks();
             loadActivityLog();
         } else {
-            console.error('Failed to update status', await response.text());
+            const errText = await response.text();
+            console.error('Failed to update status', errText);
+            showToast('Failed to update task status');
         }
     } catch (err) {
         console.error('Error updating status:', err);
+        showToast('Error updating task status');
     }
 }
 
 async function deleteTaskConfirm(taskId) {
-    if (!confirm('Delete this task?')) return;
+    // Fetch task data before deleting (for undo)
+    let taskData = null;
+    try {
+        const r = await fetch(`${API_BASE}/${taskId}`);
+        if (r.ok) taskData = await r.json();
+    } catch (e) { /* proceed without undo data */ }
+
+    const ok = await showConfirm({
+        title: 'Delete Task',
+        message: 'Are you sure you want to delete this task?',
+    });
+    if (!ok) return;
     try {
         const response = await fetch(API_BASE, {
             method: 'DELETE',
@@ -690,6 +1156,22 @@ async function deleteTaskConfirm(taskId) {
             body: JSON.stringify({ taskId }),
         });
         if (response.ok) {
+            if (taskData) {
+                pushUndo({
+                    label: `delete "${taskData.title}"`,
+                    undo: async () => {
+                        await fetch(API_BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: taskData.title, description: taskData.description, priority: taskData.priority, dueDate: taskData.dueDate, projectId: taskData.projectId }) });
+                        loadTasks(); loadActivityLog();
+                    },
+                    redo: async () => {
+                        // We can't delete the exact same ID, so just reload
+                        loadTasks(); loadActivityLog();
+                    }
+                });
+            }
+            showToast('Task deleted', {
+                undoFn: taskData ? async () => { await undo(); } : undefined
+            });
             loadTasks();
             loadActivityLog();
         } else {
@@ -723,6 +1205,10 @@ async function addTask() {
         document.getElementById('errormessage').textContent = 'Please enter a task.';
         return;
     }
+    if (taskText.length > 500) {
+        document.getElementById('errormessage').textContent = 'Task title is too long (max 500 characters).';
+        return;
+    }
     document.getElementById('errormessage').textContent = '';
 
     try {
@@ -738,8 +1224,34 @@ async function addTask() {
             }),
         });
         if (response.ok) {
+            const result = await response.json();
+            const newTaskId = result.taskId;
+            pushUndo({
+                label: `create "${taskText}"`,
+                undo: async () => {
+                    await fetch(API_BASE, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: newTaskId }) });
+                    loadTasks(); loadActivityLog();
+                },
+                redo: async () => {
+                    await fetch(API_BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: taskText, description: '', priority: prioritySelect.value, dueDate, projectId: currentProjectId === 'all' ? null : currentProjectId }) });
+                    loadTasks(); loadActivityLog();
+                }
+            });
             taskInput.value = '';
             dueDateInput.value = '';
+            // Set recurring pattern if selected
+            const recurSelect = document.getElementById('recurSelect');
+            const recurPattern = recurSelect ? recurSelect.value : '';
+            if (recurPattern && newTaskId) {
+                try {
+                    await fetch(`${API_BASE}/${newTaskId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ recurPattern }),
+                    });
+                } catch (e) { /* ignore */ }
+                if (recurSelect) recurSelect.value = '';
+            }
             loadTasks();
             loadActivityLog();
         } else {
@@ -756,7 +1268,12 @@ async function clearCompletedTasks() {
     if (doneCount === '0') {
         return;
     }
-    if (!confirm(`Clear ${doneCount} completed task(s)?`)) return;
+    const ok = await showConfirm({
+        title: 'Clear Completed',
+        message: `Clear ${doneCount} completed task(s)? This cannot be undone.`,
+        okText: 'Clear',
+    });
+    if (!ok) return;
 
     try {
         const pid = currentProjectId === 'all' ? '' : `?projectId=${currentProjectId}`;
@@ -788,20 +1305,24 @@ function updateCountdown(element, dueDate) {
     }
 
     const remainingTime = due - new Date();
+    element.classList.remove('overdue', 'due-warning', 'due-danger', 'due-ok');
     if (remainingTime > 0) {
         const days = Math.floor(remainingTime / (1000 * 60 * 60 * 24));
         const hours = Math.floor((remainingTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((remainingTime % (1000 * 60 * 60)) / (1000 * 60));
         if (days > 0) {
             element.textContent = `${days}d ${hours}h left`;
+            element.classList.add(days <= 1 ? 'due-warning' : 'due-ok');
         } else if (hours > 0) {
             element.textContent = `${hours}h ${minutes}m left`;
+            element.classList.add(hours <= 3 ? 'due-danger' : 'due-warning');
         } else {
             element.textContent = `${minutes}m left`;
+            element.classList.add('due-danger');
         }
-        element.classList.remove('overdue');
     } else {
-        element.textContent = 'Overdue';
+        const overdueDays = Math.abs(Math.floor(remainingTime / (1000 * 60 * 60 * 24)));
+        element.textContent = overdueDays > 0 ? `${overdueDays}d overdue` : 'Overdue';
         element.classList.add('overdue');
     }
 }
@@ -1083,7 +1604,11 @@ async function confirmConvertToTask() {
 }
 
 async function deleteEmail(emailId) {
-    if (!confirm('Delete this email?')) return;
+    const ok = await showConfirm({
+        title: 'Delete Email',
+        message: 'Are you sure you want to delete this email?',
+    });
+    if (!ok) return;
 
     try {
         const response = await fetch(`${EMAIL_API_BASE}/${emailId}`, {
@@ -1091,6 +1616,7 @@ async function deleteEmail(emailId) {
         });
 
         if (response.ok) {
+            showToast('Email deleted');
             document.getElementById('emailDetail').classList.add('hidden');
             loadEmails();
         }
@@ -1122,9 +1648,9 @@ async function markAllAsRead() {
         if (response.ok) {
             const data = await response.json();
             if (data.count > 0) {
-                alert(`Marked ${data.count} email(s) as read!`);
+                showToast(`Marked ${data.count} email(s) as read!`);
             } else {
-                alert('No unread emails to mark as read.');
+                showToast('No unread emails to mark as read.');
             }
             loadEmails();
             loadImportantEmails();
@@ -1133,11 +1659,11 @@ async function markAllAsRead() {
             }
         } else {
             const err = await response.text();
-            alert('Failed to mark all as read: ' + err);
+            showToast('Failed to mark all as read: ' + err);
         }
     } catch (err) {
         console.error('Error marking all as read:', err);
-        alert('Failed to mark all as read');
+        showToast('Failed to mark all as read');
     }
 }
 
@@ -1150,7 +1676,7 @@ async function connectOutlook() {
         }
     } catch (err) {
         console.error('Error getting auth URL:', err);
-        alert('Failed to connect to Outlook');
+        showToast('Failed to connect to Outlook');
     }
 }
 
@@ -1173,9 +1699,9 @@ async function syncEmails() {
             if (data.emailCount > 0) messages.push(`${data.emailCount} email(s)`);
             if (data.eventCount > 0) messages.push(`${data.eventCount} event(s)`);
             if (messages.length > 0) {
-                alert(`Synced ${messages.join(' and ')}!`);
+                showToast(`Synced ${messages.join(' and ')}!`);
             } else {
-                alert('No new emails or events found.');
+                showToast('No new emails or events found.');
             }
             loadEmails();
             loadEvents();
@@ -1184,11 +1710,11 @@ async function syncEmails() {
             }
         } else {
             const err = await response.text();
-            alert('Failed to sync: ' + err);
+            showToast('Failed to sync: ' + err);
         }
     } catch (err) {
         console.error('Error syncing:', err);
-        alert('Failed to sync: ' + err.message);
+        showToast('Failed to sync: ' + err.message);
     } finally {
         if (btn) btn.style.animation = '';
     }
@@ -1482,4 +2008,514 @@ function formatEventDate(dateStr) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// ================================
+// Daily Papers Functions
+// ================================
+
+function setupPaperButtons() {
+    const syncBtn = document.getElementById('syncPapersBtn');
+    if (syncBtn) {
+        syncBtn.addEventListener('click', async () => {
+            await syncPapers();
+        });
+    }
+}
+
+async function loadDailyPapers() {
+    try {
+        const response = await fetch(PAPER_API_BASE);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        renderDailyPapers(data.papers || [], data.date);
+    } catch (error) {
+        console.error('Failed to load daily papers:', error);
+    }
+}
+
+async function syncPapers() {
+    const container = document.getElementById('dailyPapers');
+    if (!container) return;
+
+    container.innerHTML = '<div class="no-papers">Syncing papers...</div>';
+
+    try {
+        const response = await fetch(`${PAPER_API_BASE}/sync?force=true`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            throw new Error('Sync failed');
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            await loadDailyPapers();
+        } else {
+            container.innerHTML = '<div class="no-papers">Failed to sync papers</div>';
+        }
+    } catch (error) {
+        console.error('Failed to sync papers:', error);
+        container.innerHTML = '<div class="no-papers">Failed to sync papers</div>';
+    }
+}
+
+function renderDailyPapers(papers, date) {
+    const container = document.getElementById('dailyPapers');
+    if (!container) return;
+
+    if (!papers || papers.length === 0) {
+        container.innerHTML = `
+            <div class="no-papers">
+                No papers for today yet.<br>
+                <button class="add-button" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="syncPapers()">Sync Now</button>
+            </div>
+        `;
+        return;
+    }
+
+    const papersHtml = papers.map(paper => `
+        <div class="paper-card">
+            <div class="paper-header">
+                <div class="paper-title">
+                    <a href="${escapeHtml(paper.url)}" target="_blank" rel="noopener noreferrer">
+                        ${escapeHtml(paper.title)}
+                    </a>
+                </div>
+                <span class="paper-category ${paper.category}">${paper.category.toUpperCase()}</span>
+            </div>
+            <div class="paper-summary">${escapeHtml(paper.summary || paper.abstract?.substring(0, 150) || '')}</div>
+            ${paper.innovation ? `
+                <div class="paper-innovation">
+                    <span class="paper-innovation-label">Innovation</span>
+                    <span class="paper-innovation-text">${escapeHtml(paper.innovation)}</span>
+                </div>
+            ` : ''}
+            <div class="paper-date">
+                ${formatPaperDate(paper.publishedAt)}
+                ${date ? ` • ${date}` : ''}
+                <button class="task-action-btn move-btn" style="margin-left:8px;padding:2px 8px;font-size:11px;" onclick="paperToTask('${escapeHtml(paper.title).replace(/'/g, "\\'")}', '${escapeHtml(paper.url)}')">+ Task</button>
+            </div>
+        </div>
+    `).join('');
+
+    container.innerHTML = papersHtml;
+}
+
+async function paperToTask(title, url) {
+    try {
+        const response = await fetch(API_BASE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: `Read: ${title}`,
+                description: url ? `Paper URL: ${url}` : '',
+                priority: 'medium',
+            }),
+        });
+        if (response.ok) {
+            showToast('Paper added as task');
+            loadTasks();
+        }
+    } catch (err) {
+        console.error('Error creating task from paper:', err);
+    }
+}
+
+function formatPaperDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ================================
+// Command Palette (Ctrl+K)
+// ================================
+let commandActiveIndex = -1;
+let commandItems = [];
+let searchDebounce = null;
+// Monotonic counter — each query gets a token, only the latest token's response
+// is allowed to render. Without this, slow responses can overwrite faster newer
+// ones (e.g. user types "ema" then "email" — "ema" returns later, replacing email results).
+let searchSeq = 0;
+
+function openCommandPalette() {
+    const palette = document.getElementById('commandPalette');
+    const input = document.getElementById('commandInput');
+    palette.classList.remove('hidden');
+    input.value = '';
+    input.focus();
+    document.getElementById('commandResults').innerHTML = '';
+    commandActiveIndex = -1;
+    commandItems = [];
+}
+
+function closeCommandPalette() {
+    document.getElementById('commandPalette').classList.add('hidden');
+}
+
+async function searchCommand(query) {
+    const results = document.getElementById('commandResults');
+    if (!results) return;
+    if (!query.trim()) {
+        results.innerHTML = '';
+        commandItems = [];
+        commandActiveIndex = -1;
+        return;
+    }
+
+    const mySeq = ++searchSeq;
+    try {
+        const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
+        if (mySeq !== searchSeq) return; // a newer query has been issued — drop this response
+        const data = await res.json();
+        if (mySeq !== searchSeq) return; // also after JSON parse, in case it raced
+
+        let html = '';
+        commandItems = [];
+
+        if (data.tasks.length) {
+            html += '<div class="command-group-label">Tasks</div>';
+            for (const t of data.tasks) {
+                const idx = commandItems.length;
+                commandItems.push({ type: 'task', data: t });
+                html += `<div class="command-item" data-idx="${idx}">
+                    <div class="command-item-icon">T</div>
+                    <div class="command-item-text">
+                        <div class="command-item-title">${escapeHtml(t.title)}</div>
+                        <div class="command-item-sub">${t.status.replace('container', '')} ${t.priority ? '• ' + t.priority : ''}</div>
+                    </div>
+                </div>`;
+            }
+        }
+
+        if (data.emails.length) {
+            html += '<div class="command-group-label">Emails</div>';
+            for (const e of data.emails) {
+                const idx = commandItems.length;
+                commandItems.push({ type: 'email', data: e });
+                html += `<div class="command-item" data-idx="${idx}">
+                    <div class="command-item-icon">@</div>
+                    <div class="command-item-text">
+                        <div class="command-item-title">${escapeHtml(e.subject || '(no subject)')}</div>
+                        <div class="command-item-sub">${escapeHtml(e.fromName || e.from || '')}</div>
+                    </div>
+                </div>`;
+            }
+        }
+
+        if (data.papers.length) {
+            html += '<div class="command-group-label">Papers</div>';
+            for (const p of data.papers) {
+                const idx = commandItems.length;
+                commandItems.push({ type: 'paper', data: p });
+                html += `<div class="command-item" data-idx="${idx}">
+                    <div class="command-item-icon">P</div>
+                    <div class="command-item-text">
+                        <div class="command-item-title">${escapeHtml(p.title)}</div>
+                        <div class="command-item-sub">${(p.authors || []).slice(0, 2).join(', ')}</div>
+                    </div>
+                </div>`;
+            }
+        }
+
+        if (!html) {
+            html = '<div class="command-empty">No results found</div>';
+        }
+
+        results.innerHTML = html;
+        commandActiveIndex = -1;
+
+        // Click handlers
+        results.querySelectorAll('.command-item').forEach(el => {
+            el.addEventListener('click', () => selectCommandItem(parseInt(el.dataset.idx)));
+        });
+    } catch (err) {
+        console.error('Search failed:', err);
+    }
+}
+
+function navigateCommand(direction) {
+    if (commandItems.length === 0) return;
+    const results = document.getElementById('commandResults');
+    const items = results.querySelectorAll('.command-item');
+
+    if (commandActiveIndex >= 0 && items[commandActiveIndex]) {
+        items[commandActiveIndex].classList.remove('active');
+    }
+
+    commandActiveIndex += direction;
+    if (commandActiveIndex < 0) commandActiveIndex = commandItems.length - 1;
+    if (commandActiveIndex >= commandItems.length) commandActiveIndex = 0;
+
+    if (items[commandActiveIndex]) {
+        items[commandActiveIndex].classList.add('active');
+        items[commandActiveIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+function selectCommandItem(idx) {
+    if (idx < 0 || idx >= commandItems.length) return;
+    const item = commandItems[idx];
+    closeCommandPalette();
+
+    switch (item.type) {
+        case 'task':
+            switchModule('board');
+            break;
+        case 'email':
+            switchModule('email');
+            break;
+        case 'paper':
+            if (item.data.url) window.open(item.data.url, '_blank');
+            break;
+        case 'papers':
+            switchModule('dashboard');
+            break;
+    }
+}
+
+// Command palette events
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('commandInput');
+    const palette = document.getElementById('commandPalette');
+
+    input?.addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => searchCommand(input.value), 200);
+    });
+
+    input?.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); navigateCommand(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); navigateCommand(-1); }
+        else if (e.key === 'Enter' && commandActiveIndex >= 0) { e.preventDefault(); selectCommandItem(commandActiveIndex); }
+        else if (e.key === 'Escape') { closeCommandPalette(); }
+    });
+
+    palette?.addEventListener('click', (e) => {
+        if (e.target === palette) closeCommandPalette();
+    });
+});
+
+// ================================
+// Subtasks
+// ================================
+async function loadSubtasksForCard(taskId, container) {
+    try {
+        const res = await fetch(`${API_BASE}/${taskId}/subtasks`);
+        if (!res.ok) return;
+        const data = await res.json();
+        renderSubtasks(taskId, container, data.subtasks || []);
+    } catch (e) { /* silent */ }
+}
+
+function renderSubtasks(taskId, container, subtasks) {
+    container.innerHTML = '';
+    if (subtasks.length === 0 && !container.closest('.task-card')?.querySelector('.subtask-add')) {
+        // Show add button only
+        const addRow = createSubtaskAddRow(taskId, container);
+        container.appendChild(addRow);
+        return;
+    }
+
+    // Progress bar
+    if (subtasks.length > 0) {
+        const done = subtasks.filter(s => s.completed).length;
+        const progress = document.createElement('div');
+        progress.className = 'subtask-progress';
+        progress.innerHTML = `<div class="subtask-progress-bar" style="width:${(done / subtasks.length * 100).toFixed(0)}%"></div>`;
+        container.appendChild(progress);
+    }
+
+    // Subtask list
+    const list = document.createElement('div');
+    list.className = 'subtask-list';
+    for (const sub of subtasks) {
+        const item = document.createElement('div');
+        item.className = 'subtask-item' + (sub.completed ? ' done' : '');
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = sub.completed;
+        cb.addEventListener('change', async () => {
+            await fetch(`${API_BASE}/${taskId}/subtasks/${sub.id}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ completed: cb.checked })
+            });
+            loadSubtasksForCard(taskId, container);
+        });
+
+        const label = document.createElement('span');
+        label.textContent = sub.title;
+
+        const del = document.createElement('button');
+        del.className = 'subtask-delete';
+        del.textContent = '\u00d7';
+        del.onclick = async () => {
+            await fetch(`${API_BASE}/${taskId}/subtasks/${sub.id}`, { method: 'DELETE' });
+            loadSubtasksForCard(taskId, container);
+        };
+
+        item.append(cb, label, del);
+        list.appendChild(item);
+    }
+    container.appendChild(list);
+
+    // Add new subtask input
+    container.appendChild(createSubtaskAddRow(taskId, container));
+}
+
+function createSubtaskAddRow(taskId, container) {
+    const addRow = document.createElement('div');
+    addRow.className = 'subtask-add';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = '+ Add subtask';
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter' && input.value.trim()) {
+            e.preventDefault();
+            await fetch(`${API_BASE}/${taskId}/subtasks`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: input.value.trim() })
+            });
+            loadSubtasksForCard(taskId, container);
+        }
+    });
+    addRow.appendChild(input);
+    return addRow;
+}
+
+// ================================
+// Bulk Operations
+// ================================
+let bulkMode = false;
+
+function getSelectedTaskIds() {
+    return Array.from(document.querySelectorAll('.task-checkbox:checked'))
+        .map(cb => parseInt(cb.closest('.task-card').dataset.taskId))
+        .filter(id => !isNaN(id));
+}
+
+function updateBulkSelection() {
+    const ids = getSelectedTaskIds();
+    const bar = document.getElementById('bulkBar');
+    if (ids.length > 0) {
+        bulkMode = true;
+        document.querySelector('.board')?.classList.add('bulk-mode');
+        bar.classList.remove('hidden');
+        document.getElementById('bulkCount').textContent = `${ids.length} selected`;
+    } else {
+        exitBulkMode();
+    }
+}
+
+function exitBulkMode() {
+    bulkMode = false;
+    document.querySelector('.board')?.classList.remove('bulk-mode');
+    document.getElementById('bulkBar').classList.add('hidden');
+    document.querySelectorAll('.task-checkbox:checked').forEach(cb => cb.checked = false);
+}
+
+async function bulkMove(status) {
+    const ids = getSelectedTaskIds();
+    if (!ids.length) return;
+    try {
+        await fetch(`${API_BASE}/bulk`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskIds: ids, action: 'move', status })
+        });
+        exitBulkMode();
+        loadTasks();
+        loadActivityLog();
+        showToast(`${ids.length} task(s) moved`);
+    } catch (e) { console.error('Bulk move failed:', e); }
+}
+
+async function bulkDelete() {
+    const ids = getSelectedTaskIds();
+    if (!ids.length) return;
+    const ok = await showConfirm({
+        title: 'Delete Tasks',
+        message: `Delete ${ids.length} selected task(s)? This cannot be undone.`,
+    });
+    if (!ok) return;
+    try {
+        await fetch(`${API_BASE}/bulk`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskIds: ids, action: 'delete' })
+        });
+        exitBulkMode();
+        loadTasks();
+        loadActivityLog();
+        showToast(`${ids.length} task(s) deleted`);
+    } catch (e) { console.error('Bulk delete failed:', e); }
+}
+
+// ================================
+// Keyboard Shortcuts
+// ================================
+const MODULE_KEYS = { '1': 'dashboard', '2': 'board', '3': 'calendar', '4': 'email', '5': 'list', '6': 'today', '7': 'focus' };
+
+document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.isContentEditable;
+
+    // Escape — close any open modal/palette (always, even in input — lets users dismiss popups)
+    if (e.key === 'Escape') {
+        if (!document.getElementById('commandPalette').classList.contains('hidden')) {
+            closeCommandPalette(); return;
+        }
+        document.querySelectorAll('.modal:not(.hidden)').forEach(m => m.classList.add('hidden'));
+        closeSidebar();
+        return;
+    }
+
+    // Ctrl/Cmd combos and plain key shortcuts: skip when typing.
+    // Browsers handle native Cmd+K/Cmd+Z within inputs (e.g. textarea undo) — don't override.
+    if (inInput) return;
+
+    // Ctrl+K — open search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        openCommandPalette();
+        return;
+    }
+
+    // Ctrl+Z — undo
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+    }
+
+    // Ctrl+Shift+Z — redo
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        redo();
+        return;
+    }
+
+    // Ctrl+N — new task
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        switchModule('board');
+        setTimeout(() => document.getElementById('taskInput')?.focus(), 100);
+        return;
+    }
+
+    // 1-5 — switch modules
+    if (MODULE_KEYS[e.key]) {
+        e.preventDefault();
+        switchModule(MODULE_KEYS[e.key]);
+        return;
+    }
+
+    // ? — show shortcuts help
+    if (e.key === '?') {
+        e.preventDefault();
+        document.getElementById('shortcutsHelp').classList.remove('hidden');
+    }
+});
 
