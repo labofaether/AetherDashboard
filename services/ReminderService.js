@@ -243,7 +243,7 @@ class ReminderService {
                 Promise.resolve(this.syncDailyPapers()).catch(err =>
                     log.error('ReminderService.syncDailyPapers[cron] unhandled', { message: err?.message, stack: err?.stack }));
             }, {
-                scheduled: true,
+                // node-cron 4.x removed `scheduled` (defaults to true). Keep timezone only.
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             });
             this.cronJobs.push(paperSyncJob);
