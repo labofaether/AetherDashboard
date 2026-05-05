@@ -58,30 +58,6 @@
     --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, Consolas, monospace;
 }
 
-/* ================================
-   Dark Mode
-   ================================ */
-[data-theme="dark"] {
-    --bg-primary: #1e1e2e;
-    --bg-secondary: #181825;
-    --bg-tertiary: #2a2a3c;
-    --bg-hover: #313145;
-    --text-primary: #cdd6f4;
-    --text-secondary: #a6adc8;
-    --text-tertiary: #6c7086;
-    --border-color: #313244;
-    --border-hover: #45475a;
-    --accent: #10a37f;
-    --accent-hover: #0d8a6a;
-    --accent-light: rgba(16, 163, 127, 0.15);
-    --danger: #f38ba8;
-    --danger-hover: #eb6f92;
-    --warning: #f9e2af;
-    --success: #a6e3a1;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
 body {
     margin: 0;
     font-family: var(--font-sans);
