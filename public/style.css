@@ -1105,11 +1105,7 @@ code, pre, .mono, [class*="-mono"] {
     background: rgba(239, 68, 68, 0.1);
 }
 
-.task-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
+/* (.task-actions defined later alongside .task-action-btn) */
 
 
 /* ================================
@@ -3192,8 +3188,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .btn-danger:hover { background: #9f4642; }
 
-.icon-btn-small,
-.task-action-btn {
+/* Square icon buttons (single-glyph: 🔄 ⚙ +) */
+.icon-btn-small {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3206,10 +3202,51 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     cursor: pointer;
     transition: var(--transition);
 }
-.icon-btn-small:hover,
+.icon-btn-small:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Text action buttons inside task / email cards (Edit / Complete / Delete).
+   Width auto so text isn't squeezed; comfortable horizontal padding. */
+.task-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    padding: 0 var(--space-3);
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: var(--transition);
+}
 .task-action-btn:hover {
     background: var(--bg-secondary);
     color: var(--text-primary);
+    border-color: var(--text-tertiary);
+}
+.task-action-btn.delete-btn:hover {
+    color: var(--danger);
+    border-color: rgba(184, 84, 80, 0.4);
+    background: rgba(184, 84, 80, 0.06);
+}
+.task-action-btn.move-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.task-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-top: var(--space-3);
 }
 
 /* ================================
