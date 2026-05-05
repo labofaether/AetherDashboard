@@ -29,41 +29,26 @@
         <div class="main-layout">
             <div class="sidebar-overlay" id="sidebarOverlay"></div>
             <aside class="sidebar" id="sidebar">
-                <div class="sidebar-section">
-                    <div class="sidebar-header">
-                        <h3 class="sidebar-title">Projects</h3>
-                        <button class="icon-btn" id="addProjectBtn" title="Add Project">
-                            <span>+</span>
-                        </button>
+                <nav class="sidebar-nav">
+                    <div class="sidebar-group">
+                        <a class="sidebar-item" data-module="dashboard" href="#">Today</a>
+                        <a class="sidebar-item" data-module="board" href="#">Tasks</a>
+                        <a class="sidebar-item" data-module="calendar" href="#">Calendar</a>
+                        <a class="sidebar-item" data-module="email" href="#">Email</a>
                     </div>
-                    <div class="project-list" id="projectList">
-                        <div class="project-item active" data-project-id="all">
-                            <span class="project-color" style="background: #10a37f"></span>
-                            <span class="project-name">All Projects</span>
-                            <span class="project-count" id="allCount">0</span>
-                        </div>
+                    <div class="sidebar-group">
+                        <a class="sidebar-item" data-module="focus" href="#">Focus</a>
+                        <a class="sidebar-item" data-module="today" href="#">Today List</a>
+                        <a class="sidebar-item" data-module="list" href="#">All Tasks</a>
                     </div>
-                </div>
-
-                <div class="sidebar-section">
-                    <ul class="nav-list">
-                        <li class="nav-item" data-module="today">
-                            <span class="nav-icon">&#9733;</span>
-                            <span class="nav-label">Today</span>
-                        </li>
-                        <li class="nav-item" data-module="focus">
-                            <span class="nav-icon">&#9201;</span>
-                            <span class="nav-label">Focus</span>
-                        </li>
-                    </ul>
-                </div>
-
+                </nav>
                 <div class="sidebar-section activity-log">
                     <h3 class="sidebar-title">Activity Log</h3>
                     <div class="activity-list" id="activityList">
                         <div class="no-activity">No recent activity...</div>
                     </div>
                 </div>
+                <div class="sidebar-footer">v1.0</div>
             </aside>
 
             <main class="main-content">

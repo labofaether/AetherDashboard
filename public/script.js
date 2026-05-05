@@ -221,9 +221,10 @@ function updateCurrentTime() {
 }
 
 function setupModuleButtons() {
-    document.querySelectorAll('.module-btn, .nav-item').forEach(btn => {
+    document.querySelectorAll('.sidebar-item, .module-btn, .nav-item').forEach(btn => {
         if (btn.dataset.module) {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
                 switchModule(btn.dataset.module);
             });
         }
@@ -249,8 +250,8 @@ function switchModule(module) {
     }
 
     currentModule = module;
-    // Support both .module-btn and .nav-item for navigation
-    document.querySelectorAll('.module-btn, .nav-item').forEach(btn => {
+    // Support .sidebar-item, .module-btn, and .nav-item for navigation
+    document.querySelectorAll('.sidebar-item, .module-btn, .nav-item').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.module === module);
     });
     document.querySelectorAll('.module-view').forEach(view => {
