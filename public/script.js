@@ -199,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadEvents();
     loadSyncStatus();
     loadDailyNews();
+    loadAiUsage();
     setInterval(loadActivityLog, 5000);
     setInterval(() => {
         loadEmails();
@@ -206,6 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadEvents();
         loadSyncStatus();
         loadDailyNews();
+        loadAiUsage();
     }, 60000);
 
     // Browser notifications
@@ -1985,6 +1987,104 @@ function formatNewsDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ================================
+// AI Usage card
+// ================================
+async function loadAiUsage() {
+    try {
+        const res = await fetch('/llm-usage/summary');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderAiUsage(data);
+    } catch (err) {
+        console.error('Failed to load AI usage:', err);
+    }
+}
+
+function renderAiUsage(data) {
+    const body = document.getElementById('aiUsageBody');
+    if (!body) return;
+
+    const today = data.today || { calls: 0, tokens: 0 };
+    const sr = data.successRate7d;
+    const last7d = Array.isArray(data.last7d) ? data.last7d : [];
+    const byModel = Array.isArray(data.byModel) ? data.byModel : [];
+
+    if (today.calls === 0 && byModel.length === 0) {
+        body.innerHTML = '<div class="ai-usage-empty">No LLM activity yet</div>';
+        return;
+    }
+
+    const srPct = sr === null || sr === undefined ? '—' : Math.round(sr * 100) + '%';
+    const srClass = sr === null ? 'sr-na' : sr >= 0.95 ? 'sr-ok' : sr >= 0.90 ? 'sr-warn' : 'sr-bad';
+
+    const tokenStr = formatTokenCount(today.tokens);
+
+    const sparkline = renderSparkline(last7d);
+    const modelRows = byModel.length > 1 ? `
+        <div class="ai-usage-models">
+            ${byModel.map(m => `
+                <div class="ai-usage-model-row">
+                    <span class="ai-usage-model-name">${escapeHtml(m.model)}</span>
+                    <span class="ai-usage-model-stats">${m.calls} calls · ${formatTokenCount(m.tokens)} tok</span>
+                </div>`).join('')}
+        </div>` : '';
+
+    body.innerHTML = `
+        <div class="ai-usage-stats">
+            <div class="ai-usage-stat">
+                <span class="ai-usage-value">${today.calls}</span>
+                <span class="ai-usage-label">calls today</span>
+            </div>
+            <div class="ai-usage-stat">
+                <span class="ai-usage-value">${tokenStr}</span>
+                <span class="ai-usage-label">tokens today</span>
+            </div>
+            <div class="ai-usage-stat">
+                <span class="ai-usage-value ${srClass}">${srPct}</span>
+                <span class="ai-usage-label">success rate</span>
+            </div>
+        </div>
+        ${sparkline}
+        ${modelRows}`;
+}
+
+function formatTokenCount(n) {
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return String(n);
+}
+
+function renderSparkline(days) {
+    if (!days.length) return '';
+    const W = 200, H = 40, P = 4;
+    const max = Math.max(...days.map(d => d.calls), 1);
+    const stepX = (W - 2 * P) / Math.max(days.length - 1, 1);
+    const points = days.map((d, i) => {
+        const x = P + i * stepX;
+        const y = H - P - (d.calls / max) * (H - 2 * P);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const labels = days.map((d, i) => {
+        const x = P + i * stepX;
+        const day = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' });
+        return `<text x="${x.toFixed(1)}" y="${H + 12}" text-anchor="middle">${day.slice(0,1)}</text>`;
+    }).join('');
+
+    const dots = days.map((d, i) => {
+        const x = P + i * stepX;
+        const y = H - P - (d.calls / max) * (H - 2 * P);
+        const isToday = i === days.length - 1;
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${isToday ? 3 : 2}" fill="var(--accent)" opacity="${isToday ? 1 : 0.6}"/>`;
+    }).join('');
+
+    return `
+        <svg class="ai-usage-sparkline" viewBox="0 0 ${W} ${H + 16}" preserveAspectRatio="none">
+            <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="${points}"/>
+            ${dots}
+            ${labels}
+        </svg>`;
 }
 
 // ================================
