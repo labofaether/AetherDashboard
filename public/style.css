@@ -434,15 +434,15 @@ code, pre, .mono, [class*="-mono"] {
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    padding: 24px;
+    overflow-y: auto;        /* page-level scroll — let cards size to content */
+    overflow-x: hidden;
+    /* padding handled by each module view (e.g. #dashboardView uses --space-6) */
 }
 
 .module-view {
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
 }
 
 .module-view.hidden {
@@ -514,46 +514,15 @@ code, pre, .mono, [class*="-mono"] {
 }
 
 
+/* Lists size naturally — page scrolls instead. Avoids the "Recent has too many
+   items, can't see Upcoming Deadlines below it" trap from per-list scroll. */
 .recent-tasks,
 .upcoming-tasks,
 .recent-emails,
 .upcoming-events {
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 200px;
-    padding-right: 4px;
-}
-
-.recent-tasks::-webkit-scrollbar,
-.upcoming-tasks::-webkit-scrollbar,
-.recent-emails::-webkit-scrollbar,
-.upcoming-events::-webkit-scrollbar {
-    width: 6px;
-}
-
-.recent-tasks::-webkit-scrollbar-track,
-.upcoming-tasks::-webkit-scrollbar-track,
-.recent-emails::-webkit-scrollbar-track,
-.upcoming-events::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
-    border-radius: 3px;
-}
-
-.recent-tasks::-webkit-scrollbar-thumb,
-.upcoming-tasks::-webkit-scrollbar-thumb,
-.recent-emails::-webkit-scrollbar-thumb,
-.upcoming-events::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 3px;
-}
-
-.recent-tasks::-webkit-scrollbar-thumb:hover,
-.upcoming-tasks::-webkit-scrollbar-thumb:hover,
-.recent-emails::-webkit-scrollbar-thumb:hover,
-.upcoming-events::-webkit-scrollbar-thumb:hover {
-    background: var(--text-tertiary);
 }
 
 .dash-task-item {
