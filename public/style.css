@@ -16,6 +16,7 @@
     --bg-hover: #f0eee5;
     --surface: #ffffff;                 /* card surface */
     --border: #ebe6dc;                  /* near-invisible card border */
+    --border-color: var(--border);      /* legacy alias — older selectors used --border-color */
 
     --text-primary: #1f1c18;
     --text-secondary: #6b6358;
