@@ -791,53 +791,11 @@ code, pre, .mono, [class*="-mono"] {
     border: 1px solid var(--border-color);
 }
 
-.task-input {
-    width: 100%;
-    padding: 12px 16px;
-    font-size: 15px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    transition: all 0.15s ease;
-    margin-bottom: 12px;
-    font-family: inherit;
-}
-
-.task-input:focus {
-    outline: none;
-    border-color: var(--accent);
-    background: var(--bg-primary);
-}
-
-.task-input::placeholder {
-    color: var(--text-tertiary);
-}
-
 .input-options {
     display: flex;
     gap: 10px;
     align-items: center;
     flex-wrap: wrap;
-}
-
-.date-input,
-.priority-select {
-    padding: 10px 14px;
-    font-size: 14px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-family: inherit;
-}
-
-.date-input:focus,
-.priority-select:focus {
-    outline: none;
-    border-color: var(--accent);
 }
 
 
@@ -1043,22 +1001,6 @@ code, pre, .mono, [class*="-mono"] {
     word-break: break-word;
 }
 
-.inline-edit-input {
-    width: 100%;
-    padding: 4px 8px;
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-sm);
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-size: inherit;
-    font-family: inherit;
-    outline: none;
-    margin-bottom: 6px;
-}
-
-.inline-edit-input:focus {
-    box-shadow: 0 0 0 2px var(--accent-light);
-}
 
 .task-meta {
     display: flex;
@@ -2976,36 +2918,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     display: none;
 }
 
-.quick-capture-modal input[type="text"] {
-    width: 100%;
-    padding: 10px 12px;
-    font-size: 15px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    box-sizing: border-box;
-}
-
-.quick-capture-modal input[type="text"]:focus {
-    outline: none;
-    border-color: var(--accent);
-}
-
 .quick-capture-actions {
     display: flex;
     gap: 8px;
     align-items: center;
 }
-
-.quick-capture-actions select {
-    flex: 1;
-    padding: 6px 8px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 13px;
 }
 
 /* ================================
@@ -3439,22 +3356,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     border-top: 1px solid var(--border-color);
 }
 
-.template-create input,
-.template-create textarea,
-.template-create select {
-    padding: 8px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 14px;
-}
-
-.template-create textarea {
-    resize: vertical;
-    font-family: var(--font-mono);
-    font-size: 13px;
-}
 
 /* ================================
    Recurring Task Indicator
@@ -3582,4 +3483,53 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .task-action-btn:hover {
     background: var(--bg-secondary);
     color: var(--text-primary);
+}
+
+/* ================================
+   Inputs (unified)
+   ================================ */
+.task-input,
+.date-input,
+.priority-select,
+input[type="text"]:not(.command-input):not(.no-style),
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"],
+input[type="search"],
+select,
+textarea {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    height: 40px;
+    padding: 0 var(--space-3);
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    transition: var(--transition);
+}
+textarea {
+    height: auto;
+    min-height: 80px;
+    padding: var(--space-3);
+    line-height: 1.5;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-tertiary);
+    font-style: italic;
 }
