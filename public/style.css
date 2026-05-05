@@ -468,37 +468,64 @@ code, pre, .mono, [class*="-mono"] {
     margin-bottom: 24px;
 }
 
-.stat-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+/* ================================
+   Cards
+   ================================ */
+.dashboard-section {
+    background: var(--surface);
     border-radius: var(--radius-lg);
-    padding: 20px;
+    padding: var(--space-5) var(--space-6);
+    box-shadow: var(--shadow-xs);
+    border: 1px solid transparent;
+    transition: var(--transition);
+}
+.dashboard-section:hover {
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
+}
+
+.section-header {
     display: flex;
     align-items: center;
-    gap: 16px;
-    transition: all 0.15s ease;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
 }
-
-.stat-card:hover {
-    border-color: var(--border-hover);
-}
-
-.stat-info {
-    flex: 1;
-}
-
-.stat-card .stat-value {
-    font-size: 28px;
-    font-weight: 700;
-    line-height: 1;
+.section-title {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 600;
     color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+.subsection { margin-top: var(--space-4); }
+.subsection-title {
+    margin: 0 0 var(--space-2) 0;
     font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
 }
 
-.stat-card .stat-label {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-top: 6px;
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+}
+.stat-value {
+    font-family: var(--font-serif);
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+}
+.stat-label {
+    margin-top: var(--space-2);
+    font-size: 12px;
+    color: var(--text-tertiary);
 }
 
 .dashboard-content {
@@ -534,49 +561,6 @@ code, pre, .mono, [class*="-mono"] {
 
 .dashboard-column::-webkit-scrollbar-thumb:hover {
     background: var(--text-tertiary);
-}
-
-.dashboard-section {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    flex-shrink: 0;
-}
-
-.section-header {
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.subsection {
-    margin-bottom: 20px;
-}
-
-.subsection:last-child {
-    margin-bottom: 0;
-}
-
-.subsection-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin: 0 0 12px 0;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
 }
 
 .recent-tasks,
