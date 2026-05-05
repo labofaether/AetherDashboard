@@ -3458,3 +3458,34 @@ textarea::placeholder {
     from { opacity: 0; }
     to   { opacity: 1; }
 }
+
+/* ================================
+   Custom checkboxes (.checkbox class)
+   ================================ */
+.checkbox {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+    background: var(--surface);
+}
+.checkbox.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.checkbox.checked::after {
+    content: '';
+    width: 10px;
+    height: 6px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translate(1px, -1px);
+}
+.checkbox:hover { border-color: var(--accent-hover); }
+.checkbox.checked:hover { background: var(--accent-hover); }
