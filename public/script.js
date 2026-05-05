@@ -195,7 +195,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadImportantEmails();
     loadEvents();
     loadSyncStatus();
-    loadLlmSyncStatus();
     loadDailyNews();
     setInterval(loadActivityLog, 5000);
     setInterval(() => {
@@ -203,7 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadImportantEmails();
         loadEvents();
         loadSyncStatus();
-        loadLlmSyncStatus();
         loadDailyNews();
     }, 60000);
 
@@ -273,7 +271,6 @@ function renderCurrentView() {
     switch (currentModule) {
         case 'dashboard':
             renderDashboard();
-            if (typeof loadWeeklyReview === 'function') loadWeeklyReview();
             break;
         case 'board':
             renderTasks(getFilteredTasks());
@@ -452,31 +449,12 @@ async function loadTasks() {
             allTasks = await response.json();
             renderProjects();
             renderCurrentView();
-            updateStats(allTasks);
         }
     } catch (err) {
         console.error('Error loading tasks:', err);
     } finally {
         if (boardContainer) boardContainer.classList.remove('loading');
     }
-}
-
-function updateStats(tasks) {
-    const filtered = currentProjectId === 'all' ? tasks : getFilteredTasks();
-    const todoCount = filtered.filter(t => mapStatusToFrontend(t.status) === 'todo').length;
-    const doingCount = filtered.filter(t => mapStatusToFrontend(t.status) === 'doing').length;
-    const doneCount = filtered.filter(t => mapStatusToFrontend(t.status) === 'done').length;
-
-    const overdueCount = filtered.filter(t => {
-        if (!t.dueDate) return false;
-        if (mapStatusToFrontend(t.status) === 'done') return false;
-        return new Date(t.dueDate) < new Date();
-    }).length;
-
-    setText('dashTotal', filtered.length);
-    setText('dashDoing', doingCount);
-    setText('dashDone', doneCount);
-    setText('dashOverdue', overdueCount);
 }
 
 
@@ -1693,7 +1671,6 @@ async function syncEmails() {
 }
 
 let syncStatusData = null;
-let llmSyncStatusData = null;
 
 async function loadSyncStatus() {
     try {
@@ -1723,106 +1700,6 @@ function setSyncDot(state, tooltip) {
     wrap.title = tooltip || '';
 }
 
-function renderSyncStatus() {
-    const container = document.getElementById('syncStatus');
-    if (!container || !syncStatusData) return;
-
-    const html = syncStatusData.map(status => `
-        <div class="sync-provider">
-            <div class="sync-provider-header">
-                <span class="sync-provider-name">${status.provider.charAt(0).toUpperCase() + status.provider.slice(1)}</span>
-                <span class="sync-status-badge ${status.connected ? 'connected' : 'disconnected'}">
-                    ${status.connected ? 'Connected' : 'Disconnected'}
-                </span>
-            </div>
-            <div class="sync-provider-details">
-                ${status.userEmail ? `
-                <div class="sync-detail-item">
-                    <span class="sync-detail-label">Email</span>
-                    <span class="sync-detail-value">${status.userEmail}</span>
-                </div>
-                ` : ''}
-                <div class="sync-detail-item">
-                    <span class="sync-detail-label">Emails Synced</span>
-                    <span class="sync-detail-value">${status.emailCount}</span>
-                </div>
-                <div class="sync-detail-item">
-                    <span class="sync-detail-label">Last Sync</span>
-                    <span class="sync-detail-value">${status.lastEmailSyncAt ? formatSyncTime(status.lastEmailSyncAt) : 'Never'}</span>
-                </div>
-            </div>
-        </div>
-    `).join('');
-
-    container.innerHTML = html;
-}
-
-function formatSyncTime(timeStr) {
-    const d = new Date(timeStr);
-    const now = new Date();
-    const diff = now - d;
-
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-async function loadLlmSyncStatus() {
-    try {
-        const response = await fetch(`${EMAIL_API_BASE}/llm-usage/sync-status`);
-        if (response.ok) {
-            const data = await response.json();
-            llmSyncStatusData = data.status;
-            if (currentModule === 'dashboard') {
-                renderLlmSyncStatus();
-            }
-        }
-    } catch (err) {
-        console.error('Error loading LLM sync status:', err);
-    }
-}
-
-function renderLlmSyncStatus() {
-    const container = document.getElementById('llmSyncStatus');
-    if (!container || !llmSyncStatusData) return;
-
-    const formatTokens = (tokens) => {
-        if (tokens >= 1000000) return (tokens / 1000000).toFixed(2) + 'M';
-        if (tokens >= 1000) return (tokens / 1000).toFixed(1) + 'K';
-        return tokens.toString();
-    };
-
-    const html = `
-        <div class="sync-provider">
-            <div class="sync-provider-header">
-                <span class="sync-provider-name">LLM API</span>
-                <span class="sync-status-badge connected">Active</span>
-            </div>
-            <div class="sync-provider-details">
-                <div class="sync-detail-item">
-                    <span class="sync-detail-label">Last 5 Hours</span>
-                    <span class="sync-detail-value">${llmSyncStatusData.fiveHourUsage.calls} calls, ${formatTokens(llmSyncStatusData.fiveHourUsage.tokens)} tokens</span>
-                </div>
-                <div class="sync-detail-item">
-                    <span class="sync-detail-label">This Week</span>
-                    <span class="sync-detail-value">${llmSyncStatusData.weeklyUsage.calls} calls, ${formatTokens(llmSyncStatusData.weeklyUsage.tokens)} tokens</span>
-                </div>
-                <div class="sync-detail-item">
-                    <span class="sync-detail-label">This Month</span>
-                    <span class="sync-detail-value">${llmSyncStatusData.monthlyUsage.calls} calls, ${formatTokens(llmSyncStatusData.monthlyUsage.tokens)} tokens</span>
-                </div>
-                <div class="sync-detail-item">
-                    <span class="sync-detail-label">Success Rate</span>
-                    <span class="sync-detail-value">${llmSyncStatusData.recentSuccessRate}</span>
-                </div>
-            </div>
-        </div>
-    `;
-
-    container.innerHTML = html;
-}
-
 // Helper to check if task is not expired
 function isNotExpired(task) {
     if (!task.dueDate) return true;
@@ -1831,7 +1708,6 @@ function isNotExpired(task) {
 
 function renderDashboard() {
     const filtered = getFilteredTasks();
-    updateStats(filtered);
 
     const metaContainer = document.getElementById('dashboardMeta');
     if (metaContainer) {
