@@ -7,7 +7,7 @@ const TaskModel = require('../models/TaskModel');
 const EmailModel = require('../models/EmailModel');
 const dataCleanupService = require('./DataCleanupService');
 const retentionConfig = require('../config/dataRetention');
-const PaperService = require('./PaperService');
+const NewsService = require('./NewsService');
 const cron = require('node-cron');
 const log = require('../utils/logger');
 
@@ -161,21 +161,21 @@ class ReminderService {
     }
 
     /**
-     * Sync daily papers
+     * Sync daily tech news
      */
-    async syncDailyPapers() {
+    async syncDailyNews() {
         try {
-            log.info('Running daily paper sync...');
-            const result = await PaperService.syncPapers(false);
-            if (result.success && result.papers.length > 0) {
-                log.info(`Synced ${result.papers.length} papers successfully`);
-                this.emit('papers-synced', { count: result.papers.length, papers: result.papers });
+            log.info('Running daily news sync...');
+            const result = await NewsService.syncNews(false);
+            if (result.success && result.items.length > 0) {
+                log.info(`Synced ${result.items.length} news items successfully`);
+                this.emit('news-synced', { count: result.items.length, items: result.items });
             } else if (result.cached) {
-                log.info('Using cached papers for today');
+                log.info('Using cached news for today');
             }
             return result;
         } catch (error) {
-            log.error('Error syncing daily papers:', error);
+            log.error('Error syncing daily news:', error);
             return { success: false, error: error.message };
         }
     }
@@ -208,7 +208,7 @@ class ReminderService {
 
         // Phase-shift each timer's first tick by 0–10% of its interval. Without
         // this, multiple instances started together would call external APIs
-        // (Outlook sync, paper sync) at the exact same moment forever — a
+        // (Outlook sync, news sync) at the exact same moment forever — a
         // thundering-herd risk if/when this is deployed to more than one user.
         const jittered = (interval, cb) => {
             const startDelay = Math.floor(Math.random() * interval * 0.1);
@@ -236,26 +236,26 @@ class ReminderService {
         safeAsync('checkReminders[initial]', () => this.checkReminders())();
         safeAsync('syncEmails[initial]', () => this.syncEmails())();
 
-        // Schedule daily paper sync at 8:00 AM
+        // Schedule daily news sync at 8:00 AM
         try {
-            const paperSyncJob = cron.schedule('0 8 * * *', () => {
-                log.info('Cron: Running daily paper sync...');
-                Promise.resolve(this.syncDailyPapers()).catch(err =>
-                    log.error('ReminderService.syncDailyPapers[cron] unhandled', { message: err?.message, stack: err?.stack }));
+            const newsSyncJob = cron.schedule('0 8 * * *', () => {
+                log.info('Cron: Running daily news sync...');
+                Promise.resolve(this.syncDailyNews()).catch(err =>
+                    log.error('ReminderService.syncDailyNews[cron] unhandled', { message: err?.message, stack: err?.stack }));
             }, {
                 // node-cron 4.x removed `scheduled` (defaults to true). Keep timezone only.
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             });
-            this.cronJobs.push(paperSyncJob);
-            log.info('Daily paper sync scheduled for 8:00 AM');
+            this.cronJobs.push(newsSyncJob);
+            log.info('Daily news sync scheduled for 8:00 AM');
         } catch (error) {
-            log.error('Failed to schedule paper sync cron job:', error);
+            log.error('Failed to schedule news sync cron job:', error);
         }
 
-        // Initial paper sync (try to get papers on startup)
+        // Initial news sync on startup
         setTimeout(() => {
-            Promise.resolve(this.syncDailyPapers()).catch(err =>
-                log.error('ReminderService.syncDailyPapers[initial] unhandled', { message: err?.message, stack: err?.stack }));
+            Promise.resolve(this.syncDailyNews()).catch(err =>
+                log.error('ReminderService.syncDailyNews[initial] unhandled', { message: err?.message, stack: err?.stack }));
         }, 10000);
 
         // Run initial cleanup in background

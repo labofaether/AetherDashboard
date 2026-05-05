@@ -12,12 +12,14 @@ function getKey() {
 }
 
 /**
- * Encrypt a JSON-serializable value. Returns a string "iv:authTag:ciphertext" (all hex).
- * If no ENCRYPTION_KEY is set, returns the value as-is (backwards compatible).
+ * Encrypt a JSON-serializable value. Always returns a string so callers can hand
+ * the result directly to better-sqlite3 (which rejects raw objects). Encrypted
+ * form is "enc:iv:authTag:ciphertext"; without a key we fall back to plain
+ * JSON, prefixed "json:" so decrypt() can tell the two apart.
  */
 function encrypt(value) {
     const key = getKey();
-    if (!key) return value;
+    if (!key) return 'json:' + JSON.stringify(value);
 
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
@@ -30,12 +32,17 @@ function encrypt(value) {
 }
 
 /**
- * Decrypt a value produced by encrypt(). If value is not an encrypted string, returns it as-is.
+ * Decrypt a value produced by encrypt(). Handles both "enc:" (AES-GCM) and
+ * "json:" (no-key fallback) prefixes. Anything else (raw, legacy) is returned
+ * as-is.
  */
 function decrypt(value) {
-    if (typeof value !== 'string' || !value.startsWith('enc:')) {
-        return value;
+    if (typeof value !== 'string') return value;
+    if (value.startsWith('json:')) {
+        try { return JSON.parse(value.slice(5)); }
+        catch { return null; }
     }
+    if (!value.startsWith('enc:')) return value;
 
     const key = getKey();
     if (!key) return value;

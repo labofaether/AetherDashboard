@@ -84,7 +84,7 @@ function checkOAuthGroup(env, fatal, warn, features) {
 function checkLlm(env, warn, features) {
     const apiKey = env.CLAUDE_API_KEY || env.ANTHROPIC_API_KEY;
     if (!apiKey || apiKey.startsWith('your_')) {
-        warn.push('LLM API key not set — email AI filtering and paper categorization will be disabled.');
+        warn.push('LLM API key not set — email AI filtering and news filtering will fall back to heuristics.');
         features.llm = false;
         return;
     }

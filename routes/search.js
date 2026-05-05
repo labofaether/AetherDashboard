@@ -3,7 +3,6 @@ const { z } = require('zod');
 const { getDb } = require('../db');
 const { validate } = require('../middleware/validate');
 const log = require('../utils/logger');
-const { safeJsonParse } = require('../utils/safeJson');
 const router = express.Router();
 
 const searchQuerySchema = z.object({
@@ -14,7 +13,7 @@ const searchQuerySchema = z.object({
 router.get('/', validate(searchQuerySchema, 'query'), (req, res) => {
     try {
         const q = req.query.q.trim();
-        if (!q) return res.json({ tasks: [], emails: [], papers: [] });
+        if (!q) return res.json({ tasks: [], emails: [], news: [] });
 
         const limit = req.query.limit;
         const db = getDb();
@@ -28,16 +27,11 @@ router.get('/', validate(searchQuerySchema, 'query'), (req, res) => {
             'SELECT * FROM emails WHERE subject LIKE ? OR bodyPreview LIKE ? ORDER BY receivedAt DESC LIMIT ?'
         ).all(pattern, pattern, limit).map(r => ({ ...r, isRead: !!r.isRead }));
 
-        const papers = db.prepare(
-            'SELECT * FROM papers WHERE title LIKE ? OR abstract LIKE ? ORDER BY publishedAt DESC LIMIT ?'
-        ).all(pattern, pattern, limit).map(r => ({
-            ...r,
-            authors: safeJsonParse(r.authors, [], `search paper.authors id=${r.id}`),
-            categories: safeJsonParse(r.categories, [], `search paper.categories id=${r.id}`),
-            worthPushing: !!r.worthPushing
-        }));
+        const news = db.prepare(
+            'SELECT * FROM news_items WHERE title LIKE ? OR summary LIKE ? ORDER BY publishedAt DESC LIMIT ?'
+        ).all(pattern, pattern, limit).map(r => ({ ...r, worthPushing: !!r.worthPushing }));
 
-        res.json({ tasks, emails, papers });
+        res.json({ tasks, emails, news });
     } catch (error) {
         log.error('Search error', { error: error.message });
         res.status(500).json({ error: 'Search failed' });

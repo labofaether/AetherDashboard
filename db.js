@@ -143,21 +143,20 @@ function initSchema() {
             timestamp TEXT NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS papers (
+        CREATE TABLE IF NOT EXISTS news_items (
             id TEXT PRIMARY KEY,
-            arxivId TEXT UNIQUE,
+            sourceId TEXT UNIQUE,
+            source TEXT NOT NULL,
             title TEXT,
-            abstract TEXT,
-            authors TEXT DEFAULT '[]',
-            publishedAt TEXT,
-            updatedAt TEXT,
             url TEXT,
-            categories TEXT DEFAULT '[]',
-            category TEXT,
+            author TEXT,
+            score INTEGER DEFAULT 0,
+            commentCount INTEGER DEFAULT 0,
+            publishedAt TEXT,
+            summary TEXT,
+            company TEXT,
             worthPushing INTEGER DEFAULT 0,
             filterReason TEXT,
-            summary TEXT,
-            innovation TEXT,
             displayedOn TEXT,
             createdAt TEXT NOT NULL
         );
@@ -183,8 +182,8 @@ function initSchema() {
         CREATE INDEX IF NOT EXISTS idx_emails_receivedAt ON emails(receivedAt);
         CREATE INDEX IF NOT EXISTS idx_email_filters_emailId ON email_filters(emailId);
         CREATE INDEX IF NOT EXISTS idx_events_start ON events(start);
-        CREATE INDEX IF NOT EXISTS idx_papers_displayedOn ON papers(displayedOn);
-        CREATE INDEX IF NOT EXISTS idx_papers_arxivId ON papers(arxivId);
+        CREATE INDEX IF NOT EXISTS idx_news_displayedOn ON news_items(displayedOn);
+        CREATE INDEX IF NOT EXISTS idx_news_sourceId ON news_items(sourceId);
         CREATE INDEX IF NOT EXISTS idx_reminders_taskId ON reminders(taskId);
         CREATE INDEX IF NOT EXISTS idx_reminders_triggered ON reminders(triggered, remindAt);
         CREATE INDEX IF NOT EXISTS idx_api_usage_timestamp ON api_usage(timestamp);
@@ -244,6 +243,16 @@ function initSchema() {
 
     // Index on pinnedToday (must be after ALTER TABLE)
     db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_pinnedToday ON tasks(pinnedToday)");
+
+    // Drop legacy `papers` table (replaced by `news_items`). DROP TABLE IF EXISTS
+    // is idempotent — fresh DBs and already-migrated DBs both no-op.
+    db.exec("DROP TABLE IF EXISTS papers");
+
+    // Add eventType column to news_items for commercial-event tagging
+    // (funding/earnings/M&A/leadership/launch/regulatory/partnership). Old rows
+    // get NULL — no backfill needed since news_items churns on retention policy.
+    try { db.exec("ALTER TABLE news_items ADD COLUMN eventType TEXT"); } catch(e) {}
+    db.exec("CREATE INDEX IF NOT EXISTS idx_news_eventType ON news_items(eventType)");
 }
 
 function closeDb() {

@@ -2107,9 +2107,9 @@ body {
 }
 
 /* ================================
-   Daily Papers Section
+   Tech News Section
    ================================ */
-.daily-papers {
+.daily-news {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -2118,25 +2118,25 @@ body {
     padding-right: 4px;
 }
 
-.daily-papers::-webkit-scrollbar {
+.daily-news::-webkit-scrollbar {
     width: 6px;
 }
 
-.daily-papers::-webkit-scrollbar-track {
+.daily-news::-webkit-scrollbar-track {
     background: var(--bg-secondary);
     border-radius: 3px;
 }
 
-.daily-papers::-webkit-scrollbar-thumb {
+.daily-news::-webkit-scrollbar-thumb {
     background: var(--border-color);
     border-radius: 3px;
 }
 
-.daily-papers::-webkit-scrollbar-thumb:hover {
+.daily-news::-webkit-scrollbar-thumb:hover {
     background: var(--text-tertiary);
 }
 
-.paper-card {
+.news-card {
     background: var(--bg-secondary);
     border-radius: var(--radius-sm);
     padding: 14px;
@@ -2144,12 +2144,12 @@ body {
     border: 1px solid transparent;
 }
 
-.paper-card:hover {
+.news-card:hover {
     background: var(--bg-tertiary);
     border-color: var(--border-color);
 }
 
-.paper-header {
+.news-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -2157,7 +2157,7 @@ body {
     margin-bottom: 8px;
 }
 
-.paper-title {
+.news-title {
     flex: 1;
     font-size: 14px;
     font-weight: 600;
@@ -2165,84 +2165,90 @@ body {
     line-height: 1.4;
 }
 
-.paper-title a {
+.news-title a {
     color: var(--text-primary);
     text-decoration: none;
     transition: color 0.15s ease;
 }
 
-.paper-title a:hover {
+.news-title a:hover {
     color: var(--accent);
 }
 
-.paper-category {
+.news-tags {
     flex-shrink: 0;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.news-company {
     font-size: 11px;
     padding: 2px 8px;
     border-radius: var(--radius-sm);
     font-family: var(--font-mono);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.paper-category.ai {
-    background: rgba(16, 163, 127, 0.1);
-    color: #10a37f;
-}
-
-.paper-category.network {
     background: rgba(59, 130, 246, 0.1);
     color: #3b82f6;
+    letter-spacing: 0.02em;
 }
 
-.paper-category.iot {
-    background: rgba(245, 158, 11, 0.1);
-    color: #f59e0b;
+.news-event {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.news-event-funding   { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.news-event-earnings  { background: rgba(34, 197, 94, 0.12);  color: #16a34a; }
+.news-event-ma        { background: rgba(168, 85, 247, 0.12); color: #9333ea; }
+.news-event-leadership{ background: rgba(245, 158, 11, 0.12); color: #d97706; }
+.news-event-launch    { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
+.news-event-regulatory{ background: rgba(239, 68, 68, 0.12);  color: #dc2626; }
+.news-event-partnership{ background: rgba(20, 184, 166, 0.12); color: #0d9488; }
+.news-event-layoff    { background: rgba(244, 63, 94, 0.12);  color: #e11d48; }
+
+.news-source {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-transform: capitalize;
 }
 
-.paper-summary {
+.news-summary {
     font-size: 13px;
     color: var(--text-secondary);
     line-height: 1.5;
     margin-bottom: 8px;
 }
 
-.paper-innovation {
-    display: inline-flex;
+.news-meta {
+    display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-tertiary);
-}
-
-.paper-innovation-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.paper-innovation-text {
-    flex: 1;
-}
-
-.no-papers {
-    color: var(--text-tertiary);
-    font-size: 13px;
-    text-align: center;
-    padding: 20px;
-}
-
-.paper-date {
+    gap: 10px;
     font-size: 11px;
     color: var(--text-tertiary);
     font-family: var(--font-mono);
     margin-top: 8px;
     padding-top: 8px;
     border-top: 1px solid var(--border-color);
+}
+
+.news-score, .news-comments, .news-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.no-news {
+    color: var(--text-tertiary);
+    font-size: 13px;
+    text-align: center;
+    padding: 20px;
 }
 
 /* ================================

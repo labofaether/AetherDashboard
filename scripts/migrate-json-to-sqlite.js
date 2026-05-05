@@ -202,25 +202,9 @@ function migrate() {
         counts.llmUsage = data.llmUsage.length;
     }
 
-    // Papers
-    if (data.papers?.length) {
-        const stmt = db.prepare(`
-            INSERT INTO papers (id, arxivId, title, abstract, authors, publishedAt, updatedAt, url,
-                categories, category, worthPushing, filterReason, summary, innovation, displayedOn, createdAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        const insert = db.transaction(() => {
-            for (const p of data.papers) {
-                stmt.run(p.id, p.arxivId, p.title, p.abstract,
-                    JSON.stringify(p.authors || []), p.publishedAt, p.updatedAt, p.url,
-                    JSON.stringify(p.categories || []), p.category,
-                    p.worthPushing ? 1 : 0, p.filterReason, p.summary, p.innovation,
-                    p.displayedOn || null, p.createdAt);
-            }
-        });
-        insert();
-        counts.papers = data.papers.length;
-    }
+    // Note: legacy `papers` table was removed in favor of `news_items`. If a
+    // pre-news board.json contains a `papers` array, we skip it here — those
+    // rows referred to arXiv papers, not the new HN-based news feed.
 
     console.log('\nMigration complete!');
     console.log('Records migrated:');

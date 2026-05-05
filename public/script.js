@@ -2,7 +2,7 @@ const API_BASE = '/tasks';
 const PROJECT_API_BASE = '/projects';
 const ACTIVITY_API_BASE = '/activity';
 const EMAIL_API_BASE = '/emails';
-const PAPER_API_BASE = '/papers';
+const NEWS_API_BASE = '/news';
 
 let allEmails = [];
 let allEvents = [];
@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupCalendarButtons();
     setupListControls();
     setupColorOptions();
-    setupPaperButtons();
+    setupNewsButtons();
 
     updateCurrentTime();
     setInterval(updateCurrentTime, 1000);
@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadEvents();
     loadSyncStatus();
     loadLlmSyncStatus();
-    loadDailyPapers();
+    loadDailyNews();
     setInterval(loadActivityLog, 5000);
     setInterval(() => {
         loadEmails();
@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadEvents();
         loadSyncStatus();
         loadLlmSyncStatus();
-        loadDailyPapers();
+        loadDailyNews();
     }, 60000);
 
     // Browser notifications
@@ -2009,125 +2009,127 @@ function formatEventDate(dateStr) {
 }
 
 // ================================
-// Daily Papers Functions
+// Tech News Functions
 // ================================
 
-function setupPaperButtons() {
-    const syncBtn = document.getElementById('syncPapersBtn');
+function setupNewsButtons() {
+    const syncBtn = document.getElementById('syncNewsBtn');
     if (syncBtn) {
         syncBtn.addEventListener('click', async () => {
-            await syncPapers();
+            await syncNews();
         });
     }
 }
 
-async function loadDailyPapers() {
+async function loadDailyNews() {
     try {
-        const response = await fetch(PAPER_API_BASE);
+        const response = await fetch(NEWS_API_BASE);
         if (!response.ok) return;
 
         const data = await response.json();
-        renderDailyPapers(data.papers || [], data.date);
+        renderDailyNews(data.items || [], data.date);
     } catch (error) {
-        console.error('Failed to load daily papers:', error);
+        console.error('Failed to load daily news:', error);
     }
 }
 
-async function syncPapers() {
-    const container = document.getElementById('dailyPapers');
+async function syncNews() {
+    const container = document.getElementById('dailyNews');
     if (!container) return;
 
-    container.innerHTML = '<div class="no-papers">Syncing papers...</div>';
+    container.innerHTML = '<div class="no-news">Syncing news...</div>';
 
     try {
-        const response = await fetch(`${PAPER_API_BASE}/sync?force=true`, {
+        const response = await fetch(`${NEWS_API_BASE}/sync?force=true`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
 
-        if (!response.ok) {
-            throw new Error('Sync failed');
-        }
+        if (!response.ok) throw new Error('Sync failed');
 
         const data = await response.json();
 
         if (data.success) {
-            await loadDailyPapers();
+            await loadDailyNews();
         } else {
-            container.innerHTML = '<div class="no-papers">Failed to sync papers</div>';
+            container.innerHTML = '<div class="no-news">Failed to sync news</div>';
         }
     } catch (error) {
-        console.error('Failed to sync papers:', error);
-        container.innerHTML = '<div class="no-papers">Failed to sync papers</div>';
+        console.error('Failed to sync news:', error);
+        container.innerHTML = '<div class="no-news">Failed to sync news</div>';
     }
 }
 
-function renderDailyPapers(papers, date) {
-    const container = document.getElementById('dailyPapers');
+function renderDailyNews(items, date) {
+    const container = document.getElementById('dailyNews');
     if (!container) return;
 
-    if (!papers || papers.length === 0) {
+    if (!items || items.length === 0) {
         container.innerHTML = `
-            <div class="no-papers">
-                No papers for today yet.<br>
-                <button class="add-button" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="syncPapers()">Sync Now</button>
+            <div class="no-news">
+                No news for today yet.<br>
+                <button class="add-button" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="syncNews()">Sync Now</button>
             </div>
         `;
         return;
     }
 
-    const papersHtml = papers.map(paper => `
-        <div class="paper-card">
-            <div class="paper-header">
-                <div class="paper-title">
-                    <a href="${escapeHtml(paper.url)}" target="_blank" rel="noopener noreferrer">
-                        ${escapeHtml(paper.title)}
+    const itemsHtml = items.map(item => {
+        const eventTypeBadge = item.eventType
+            ? `<span class="news-event news-event-${escapeHtml(item.eventType.toLowerCase().replace(/[^a-z]/g, ''))}">${escapeHtml(item.eventType)}</span>`
+            : '';
+        const sourceLabel = item.source && item.source !== 'hackernews' ? item.source : '';
+        return `
+        <div class="news-card">
+            <div class="news-header">
+                <div class="news-title">
+                    <a href="${escapeHtml(item.url || '#')}" target="_blank" rel="noopener noreferrer">
+                        ${escapeHtml(item.title)}
                     </a>
                 </div>
-                <span class="paper-category ${paper.category}">${paper.category.toUpperCase()}</span>
-            </div>
-            <div class="paper-summary">${escapeHtml(paper.summary || paper.abstract?.substring(0, 150) || '')}</div>
-            ${paper.innovation ? `
-                <div class="paper-innovation">
-                    <span class="paper-innovation-label">Innovation</span>
-                    <span class="paper-innovation-text">${escapeHtml(paper.innovation)}</span>
+                <div class="news-tags">
+                    ${eventTypeBadge}
+                    ${item.company ? `<span class="news-company">${escapeHtml(item.company)}</span>` : ''}
                 </div>
-            ` : ''}
-            <div class="paper-date">
-                ${formatPaperDate(paper.publishedAt)}
-                ${date ? ` • ${date}` : ''}
-                <button class="task-action-btn move-btn" style="margin-left:8px;padding:2px 8px;font-size:11px;" onclick="paperToTask('${escapeHtml(paper.title).replace(/'/g, "\\'")}', '${escapeHtml(paper.url)}')">+ Task</button>
             </div>
-        </div>
-    `).join('');
+            ${item.summary ? `<div class="news-summary">${escapeHtml(item.summary)}</div>` : ''}
+            <div class="news-meta">
+                ${item.score ? `<span class="news-score">▲ ${item.score}</span>` : ''}
+                ${item.commentCount ? `<span class="news-comments">💬 ${item.commentCount}</span>` : ''}
+                ${sourceLabel ? `<span class="news-source">${escapeHtml(sourceLabel)}</span>` : ''}
+                <span class="news-date">${formatNewsDate(item.publishedAt)}</span>
+                <button class="task-action-btn move-btn" style="margin-left:auto;padding:2px 8px;font-size:11px;" onclick="newsToTask('${escapeHtml(item.title).replace(/'/g, "\\'")}', '${escapeHtml(item.url || '')}')">+ Task</button>
+            </div>
+        </div>`;
+    }).join('');
 
-    container.innerHTML = papersHtml;
+    container.innerHTML = itemsHtml;
 }
 
-async function paperToTask(title, url) {
+async function newsToTask(title, url) {
     try {
         const response = await fetch(API_BASE, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 title: `Read: ${title}`,
-                description: url ? `Paper URL: ${url}` : '',
+                description: url ? `News URL: ${url}` : '',
                 priority: 'medium',
             }),
         });
         if (response.ok) {
-            showToast('Paper added as task');
+            showToast('News added as task');
             loadTasks();
         }
     } catch (err) {
-        console.error('Error creating task from paper:', err);
+        console.error('Error creating task from news:', err);
     }
 }
 
-function formatPaperDate(dateStr) {
+function formatNewsDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 // ================================
@@ -2206,16 +2208,16 @@ async function searchCommand(query) {
             }
         }
 
-        if (data.papers.length) {
-            html += '<div class="command-group-label">Papers</div>';
-            for (const p of data.papers) {
+        if ((data.news || []).length) {
+            html += '<div class="command-group-label">News</div>';
+            for (const n of data.news) {
                 const idx = commandItems.length;
-                commandItems.push({ type: 'paper', data: p });
+                commandItems.push({ type: 'news', data: n });
                 html += `<div class="command-item" data-idx="${idx}">
-                    <div class="command-item-icon">P</div>
+                    <div class="command-item-icon">N</div>
                     <div class="command-item-text">
-                        <div class="command-item-title">${escapeHtml(p.title)}</div>
-                        <div class="command-item-sub">${(p.authors || []).slice(0, 2).join(', ')}</div>
+                        <div class="command-item-title">${escapeHtml(n.title)}</div>
+                        <div class="command-item-sub">${escapeHtml(n.company || n.source || '')}</div>
                     </div>
                 </div>`;
             }
@@ -2268,11 +2270,8 @@ function selectCommandItem(idx) {
         case 'email':
             switchModule('email');
             break;
-        case 'paper':
+        case 'news':
             if (item.data.url) window.open(item.data.url, '_blank');
-            break;
-        case 'papers':
-            switchModule('dashboard');
             break;
     }
 }
