@@ -1696,17 +1696,30 @@ let llmSyncStatusData = null;
 
 async function loadSyncStatus() {
     try {
-        const response = await fetch(`${EMAIL_API_BASE}/usage/sync-status`);
-        if (response.ok) {
-            const data = await response.json();
-            syncStatusData = data.status;
-            if (currentModule === 'dashboard') {
-                renderSyncStatus();
-            }
+        const res = await fetch(`${EMAIL_API_BASE}/usage/sync-status`);
+        if (!res.ok) {
+            setSyncDot('error', 'Sync status unavailable');
+            return;
         }
+        const data = await res.json();
+        const failures = data?.reminder?.sync?.consecutiveFailures || 0;
+        const lastSuccess = data?.reminder?.sync?.lastSuccessAt;
+        let state = 'ok';
+        if (failures >= 3) state = 'error';
+        else if (failures > 0) state = 'stale';
+        const tooltip = lastSuccess ? `Last sync: ${new Date(lastSuccess).toLocaleString()}` : 'Awaiting first sync';
+        setSyncDot(state, tooltip + (failures ? ` · ${failures} consecutive failures` : ''));
     } catch (err) {
-        console.error('Error loading sync status:', err);
+        setSyncDot('error', 'Sync status check failed');
     }
+}
+
+function setSyncDot(state, tooltip) {
+    const wrap = document.getElementById('topbarSync');
+    if (!wrap) return;
+    const dot = wrap.querySelector('.topbar-sync-dot');
+    if (dot) dot.dataset.state = state;
+    wrap.title = tooltip || '';
 }
 
 function renderSyncStatus() {
