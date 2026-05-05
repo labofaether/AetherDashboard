@@ -291,20 +291,6 @@ code, pre, .mono, [class*="-mono"] {
     border-color: var(--border-hover);
 }
 
-.icon-btn-small {
-    width: 24px;
-    height: 24px;
-    border: none;
-    background: transparent;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.15s ease;
-}
-
-.icon-btn-small:hover {
-    color: var(--danger);
-}
 
 /* ================================
    Project List (in sidebar)
@@ -854,21 +840,6 @@ code, pre, .mono, [class*="-mono"] {
     border-color: var(--accent);
 }
 
-.add-button {
-    padding: 10px 24px;
-    font-size: 14px;
-    font-weight: 500;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: var(--accent);
-    color: white;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.add-button:hover {
-    background: var(--accent-hover);
-}
 
 .error-message {
     margin-top: 12px;
@@ -1294,50 +1265,6 @@ code, pre, .mono, [class*="-mono"] {
     flex-wrap: wrap;
 }
 
-.task-action-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    background: var(--bg-primary);
-    color: var(--text-secondary);
-}
-
-.task-action-btn:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-color: var(--border-hover);
-}
-
-.task-action-btn.move-btn {
-    color: var(--accent);
-    border-color: var(--accent);
-}
-
-.task-action-btn.move-btn:hover {
-    background: var(--accent-light);
-}
-
-.task-action-btn.edit-btn {
-    color: #3b82f6;
-    border-color: #3b82f6;
-}
-
-.task-action-btn.edit-btn:hover {
-    background: rgba(59, 130, 246, 0.1);
-}
-
-.task-action-btn.delete-btn {
-    color: var(--danger);
-    border-color: var(--danger);
-}
-
-.task-action-btn.delete-btn:hover {
-    background: rgba(239, 68, 68, 0.1);
-}
 
 /* ================================
    Calendar View
@@ -2916,38 +2843,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     border-radius: var(--radius-md);
 }
 
-.btn-primary {
-    background: var(--accent);
-    color: white;
-    border: none;
-    cursor: pointer;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-weight: 500;
-    transition: opacity 0.15s;
-}
-
-.btn-primary:hover {
-    opacity: 0.9;
-}
-
-.btn-secondary {
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-weight: 500;
-    transition: all 0.15s;
-}
-
-.btn-secondary:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-}
 
 .focus-stats-section {
     display: flex;
@@ -3623,4 +3518,68 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
         transition: transform var(--transition);
     }
     .sidebar.open { transform: translateX(0); }
+}
+
+/* ================================
+   Buttons (unified)
+   ================================ */
+.btn,
+.add-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: var(--radius-md);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.btn:hover,
+.add-button:hover { background: var(--accent-hover); }
+.btn:disabled,
+.add-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid #d6cfc1;
+}
+.btn-secondary:hover { border-color: var(--accent); background: transparent; }
+
+.btn-ghost {
+    background: transparent;
+    color: var(--accent);
+    border: 0;
+    padding: var(--space-2) var(--space-3);
+}
+.btn-ghost:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 2px; }
+
+.btn-danger {
+    background: var(--danger);
+}
+.btn-danger:hover { background: #9f4642; }
+
+.icon-btn-small,
+.task-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.icon-btn-small:hover,
+.task-action-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
 }
