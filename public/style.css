@@ -2248,7 +2248,7 @@ kbd {
     position: fixed;
     left: 50%;
     bottom: var(--space-6);
-    transform: translateX(-50%) translateY(16px);
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -2261,18 +2261,14 @@ kbd {
     box-shadow: var(--shadow-md);
     color: var(--text-primary);
     font-size: 13px;
-    opacity: 0;
-    transition: opacity var(--transition), transform var(--transition);
     z-index: 200;
-}
-.toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    animation: toast-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .toast.toast-error { border-left-color: var(--danger); }
 .toast.toast-success { border-left-color: var(--accent); }
 
-.toast .toast-action {
+.toast .toast-action,
+.toast .toast-undo {
     margin-left: auto;
     color: var(--accent);
     background: transparent;
@@ -2281,7 +2277,13 @@ kbd {
     font: inherit;
     cursor: pointer;
 }
-.toast .toast-action:hover { color: var(--accent-hover); text-decoration: underline; }
+.toast .toast-action:hover,
+.toast .toast-undo:hover { color: var(--accent-hover); text-decoration: underline; }
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 
 /* ================================
    Responsive: Tablet (768px)
