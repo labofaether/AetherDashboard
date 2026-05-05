@@ -11,38 +11,18 @@
 </head>
 <body>
     <div class="app-container">
-        <header class="top-nav">
-            <div class="nav-left">
-                <button class="hamburger" id="hamburgerBtn" title="Toggle sidebar">&#9776;</button>
-                <div class="status-indicator">
-                    <div class="status-dot"></div>
-                    <span class="status-text">Online</span>
-                </div>
-                <h1 class="title">Aether Dashboard</h1>
-            </div>
-            <nav class="nav-modules">
-                <button class="module-btn active" data-module="dashboard">
-                    <span class="module-label">Dashboard</span>
-                </button>
-                <button class="module-btn" data-module="board">
-                    <span class="module-label">Board</span>
-                </button>
-                <button class="module-btn" data-module="calendar">
-                    <span class="module-label">Calendar</span>
-                </button>
-                <button class="module-btn" data-module="email">
-                    <span class="module-label">Email</span>
-                    <span class="email-badge hidden" id="emailBadge">0</span>
-                </button>
-                <button class="module-btn" data-module="list">
-                    <span class="module-label">List</span>
-                </button>
-                <button class="module-btn" id="videoAgentBtn" title="Open Video Agent">
-                    <span class="module-label">Video</span>
-                </button>
-            </nav>
-            <div class="nav-right">
-                <div class="current-time" id="currentTime">--:--:--</div>
+        <header class="topbar">
+            <button class="hamburger" id="hamburgerBtn" title="Toggle sidebar" aria-label="Menu">&#9776;</button>
+            <div class="topbar-brand">Aether</div>
+            <button class="topbar-search" id="topbarSearch" type="button">
+                <span class="topbar-search-icon">⌘K</span>
+                <span class="topbar-search-text">Search tasks, emails, news…</span>
+            </button>
+            <div class="topbar-meta">
+                <span class="topbar-time" id="topbarTime"></span>
+                <span class="topbar-sync" id="topbarSync" title="Sync status">
+                    <span class="topbar-sync-dot" data-state="ok"></span>
+                </span>
             </div>
         </header>
 

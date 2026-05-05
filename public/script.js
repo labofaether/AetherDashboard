@@ -172,6 +172,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('hamburgerBtn')?.addEventListener('click', toggleSidebar);
     document.getElementById('sidebarOverlay')?.addEventListener('click', closeSidebar);
 
+    // Top bar search trigger
+    document.getElementById('topbarSearch')?.addEventListener('click', openCommandPalette);
+
     setupModuleButtons();
     setupVideoAgentButton();
     setupProjectButtons();
@@ -211,14 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function updateCurrentTime() {
+    const el = document.getElementById('topbarTime');
+    if (!el) return;
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-    document.getElementById('currentTime').textContent = timeStr;
+    el.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function setupModuleButtons() {
