@@ -1,202 +1,114 @@
 # Aether Dashboard
 
-A personal productivity system with modular views and project organization.
+A self-hosted, single-user productivity dashboard. One screen for today's tasks, important email, calendar, tech-business news, and AI-usage stats. Runs locally — your data never leaves the machine.
 
-## Development Timeline
+Part of the **Aether** project family. Visual language: warm-minimalism inspired by [claude.ai](https://claude.ai). Light mode only, by design. See [`docs/superpowers/specs/2026-05-05-ui-claude-style-design.md`](docs/superpowers/specs/2026-05-05-ui-claude-style-design.md) for the design spec.
 
-### Phase 1: Focus Board (Initial)
-- Simple three-column task board (To Do → In Progress → Done)
-- Task priorities and due dates
-- Local SQLite database
+## What's on the dashboard
 
-### Phase 2: Mission Control v1 (Completed)
-- Dark tech-themed UI
-- Dashboard with statistics
-- Activity log tracking
-- Four modular views:
-  - Dashboard - overview and stats
-  - Board - Kanban-style task board
-  - Calendar - timeline view
-  - List - table view with filtering/sorting
+- **Tech News digest** — daily aggregation of Hacker News + TechCrunch + The Verge + 36氪 RSS, filtered by an LLM for commercial events about notable internet companies. Each item gets tagged with `eventType` (funding / earnings / M&A / leadership / launch / regulatory / partnership / layoff) and a company name.
+- **Tasks** — recent + upcoming-deadline lists, with full Board / List / Calendar / Today views via the sidebar.
+- **Email** — Outlook integration via Microsoft Graph (OAuth 2.0). Important inbox preview on the dashboard, full inbox on its own module.
+- **Calendar** — upcoming events from the same Outlook account.
+- **AI Usage** — KPIs (today's calls, tokens, 7-day success rate) + a 7-day SVG sparkline. Reflects this app's own LLM activity, not your Anthropic Console balance.
+- **Sync indicator** — top-bar dot (green / amber / red) shows email-sync health at a glance.
+- **Command palette** — `⌘K` searches tasks, emails, and news from anywhere.
 
-### Phase 3: Mission Control v2 (Current)
-- Project classification with color coding
-- Enhanced board design
-- Modular architecture improvements
-- JSON-based data storage
+Other modules accessible from the sidebar: Focus (Pomodoro), Goals, Notes (sticky notes), All Tasks (table view).
 
-### Phase 4: Minimalist Redesign (In Progress)
-- Claude/OpenAI inspired minimalist design
-- Clean, professional aesthetic
-- No emojis
-- Neutral color palette with restrained accents
+## Quick start
 
-### Phase 5: Upcoming
-- TBD
-
-### Phase 6: Email Integration (2026-03-15, Completed)
-- **Outlook Integration**: OAuth 2.0 authentication with Microsoft Graph API
-- **Email View**: Inbox with read/unread status, sender, subject, preview
-- **Email-to-Task**: Convert emails to tasks with one click
-- **Sync Status**: Display connected email address and sync counts
-- **LLM Usage Tracking**: Monitor API usage in 5-hour, weekly, monthly windows
-- **AI Email Filtering**: Token-efficient heuristic + LLM fallback for important email detection
-- **Mark All as Read**: Bulk mark emails as read with local state first, async provider sync
-- **Performance Optimizations**: Event delegation, non-blocking async operations
-- **Dashboard Redesign**: Two-column layout, professional minimalist style, scrollbars on all views
-
-### Phase 7: Data Retention & Video Agent Integration (2026-03-16, Completed)
-- **Data Retention Service**: Automated cleanup to prevent database bloat on consumer hardware
-- **Email Retention**: Keep recent 500 emails or 30 days (whichever is fewer), converted-to-task emails kept for 90 days
-- **Event Retention**: Keep all future events + past 14 days
-- **Reminder Retention**: Keep triggered reminders for 7 days
-- **Email Filter Retention**: Keep recent 100 filter results
-- **Cleanup Scheduling**: Light cleanup hourly, full cleanup daily
-- **Video Agent Link**: Quick access button to open Aether-video-agent in new tab (runs on port 3001)
-- **Multi-Account Email Display**: Dashboard Important Email section shows both sender and recipient addresses for multi-email setups
-- **Background Service Integration**: Data cleanup integrated with ReminderService for automatic execution
-
-### Phase 8: Memory & Portability Improvements (2026-03-16, Current)
-- **In-Memory Caching**: Database loaded once and cached in memory, reducing disk I/O
-- **Write Queue & Debouncing**: Async write queue prevents race conditions, changes flushed periodically
-- **Graceful Shutdown**: Ensures all data is saved to disk before exit
-- **Configurable Port**: Server port can be set via PORT environment variable
-- **Environment Template**: .env.example provided for easy setup
-- **Improved Documentation**: Comprehensive setup guide for new users
-- **Thread Safety**: Prevents concurrent write conflicts with write queue
-
-## Features
-
-### Current Features
-- **Multiple Views**: Dashboard, Board, Calendar, List, and Email modes
-- **Project Management**: Create and organize tasks by project with color coding
-- **Task Attributes**: Title, description, priority (Low/Medium/High), due date, status
-- **Activity Log**: Track all task changes
-- **Statistics**: Real-time counts for total, in progress, completed, and overdue tasks
-- **Email Integration**: Outlook sync, email view, email-to-task conversion, multi-account support
-- **LLM Integration**: AI email filtering, API usage tracking
-- **Data Retention**: Automated cleanup to prevent database bloat, configurable retention policies
-- **Video Agent Integration**: Quick access button to launch Aether-video-agent (YouTube/Bilibili summarization tool)
-- **Memory Optimized**: In-memory caching with periodic flushing for better performance
-- **Portable**: Easy to install and run anywhere with Node.js
-
-### Tech Stack
-- **Backend**: Node.js + Express
-- **Data Storage**: JSON file-based
-- **Frontend**: Vanilla JavaScript + CSS3
-
-## Getting Started
-
-### Prerequisites
-- Node.js (v14 or higher)
-
-### Quick Start
-
-1. **Clone or download the project**
-   ```bash
-   cd To-Do_List
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Configure environment variables**
-   ```bash
-   # Copy the example configuration
-   cp .env.example .env
-   ```
-
-   Edit the `.env` file and fill in your configuration (see [Configuration](#configuration) below).
-
-4. **Start the server**
-   ```bash
-   npm start
-   ```
-
-5. **Open the application**
-
-   Navigate to `http://localhost:3000` in your browser.
-
-### Configuration
-
-The `.env` file contains all configurable settings:
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `PORT` | Server port (default: 3000) | No |
-| `AZURE_TENANT_ID` | Azure AD tenant ID for Outlook | For email |
-| `AZURE_CLIENT_ID` | Azure AD client ID | For email |
-| `AZURE_CLIENT_SECRET` | Azure AD client secret | For email |
-| `AZURE_REDIRECT_URI` | OAuth redirect URI | For email |
-| `DEFAULT_FROM_EMAIL` | Default sender email | For email |
-| `REMINDER_CHECK_INTERVAL` | Reminder check interval in ms (default: 60000) | No |
-| `EMAIL_SYNC_INTERVAL` | Email sync interval in ms (default: 300000) | No |
-| `ANTHROPIC_BASE_URL` | LLM API base URL | For AI filtering |
-| `ANTHROPIC_API_KEY` | LLM API key | For AI filtering |
-| `ANTHROPIC_MODEL` | LLM model name | For AI filtering |
-
-**Note**: Email and AI features are optional. The core task management works without any external configuration.
-
-### Data Storage
-
-All data is stored locally in `board.json`. The file is created automatically on first run.
-
-- **Memory Optimization**: Data is cached in memory and flushed to disk periodically (default: 2 seconds)
-- **Backup**: Consider backing up `board.json` regularly
-- **Portability**: Simply copy the entire directory to move your data to another machine
-
-## Project Structure
-
-```
-To-Do_List/
-├── server.js                 # Express server entry point
-├── db.js                     # JSON data layer
-├── config/
-│   ├── emailProviders.js     # Email provider configuration
-│   └── dataRetention.js      # Data retention policy configuration
-├── emailProviders/
-│   ├── EmailProviderInterface.js  # Abstract provider interface
-│   └── OutlookProvider.js    # Microsoft Graph API implementation
-├── models/
-│   ├── TaskModel.js          # Task CRUD operations
-│   ├── ProjectModel.js       # Project CRUD operations
-│   ├── EmailModel.js         # Email CRUD and sync operations
-│   ├── ApiUsageModel.js      # API usage tracking
-│   └── LlmUsageModel.js      # LLM usage tracking
-├── routes/
-│   ├── tasks.js              # Task API endpoints
-│   ├── projects.js           # Project API endpoints
-│   ├── activity.js           # Activity API endpoints
-│   └── emails.js             # Email API endpoints
-├── services/
-│   ├── ReminderService.js    # Background reminder, sync, and cleanup service
-│   ├── EmailFilterService.js # AI email filtering
-│   └── DataCleanupService.js # Automated data cleanup and retention
-├── .env                      # Environment variables (API credentials, not tracked)
-├── .env.example              # Environment variable template
-├── board.json                # Data storage (not tracked)
-└── public/
-    ├── index.html            # Main UI with Video Agent link
-    ├── style.css             # Minimalist styling
-    └── script.js             # Frontend logic
+```bash
+npm install                          # better-sqlite3 needs node-gyp
+cp .env.example .env                 # then fill in (see "Configuration" below)
+npm start                            # serves on http://localhost:3000
 ```
 
-## API Endpoints
+Open http://localhost:3000 in your browser. The dashboard works without any external configuration; email and AI features are progressive — the dashboard renders fine if you skip them.
 
-### Tasks
-- `GET /tasks` - Fetch all tasks (optionally filtered by projectId)
-- `POST /tasks` - Create a new task
-- `PUT /tasks/status` - Update task status
-- `PUT /tasks/description` - Update task description
-- `DELETE /tasks` - Delete a task
-- `POST /tasks/clear-completed` - Clear all completed tasks
+### Run the test suite
 
-### Projects
-- `GET /projects` - Fetch all projects
-- `POST /projects` - Create a new project
-- `DELETE /projects` - Delete a project
+```bash
+npm test
+```
 
-### Activity
-- `GET /activity` - Fetch recent activity
+Uses Node's built-in `node:test` runner. Tests run against an in-memory SQLite (no fixture cleanup needed).
+
+## Configuration
+
+`.env` is read by `dotenv` at startup. All vars are optional — leave them unset to disable that feature.
+
+| Variable | What it does | Required for |
+|---|---|---|
+| `PORT` | Server port (default 3000) | — |
+| `ENCRYPTION_KEY` | 32+ char secret used to AES-256-GCM-encrypt OAuth tokens at rest | OAuth persistence |
+| `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_REDIRECT_URI` | Azure AD app credentials for Outlook OAuth | Email integration |
+| `ANTHROPIC_API_KEY` (or `CLAUDE_API_KEY`) | LLM API key | News filtering, AI email triage |
+| `ANTHROPIC_BASE_URL` | LLM endpoint (defaults to Anthropic; can point at any Anthropic-compatible API like Volcano Engine Ark) | — |
+| `ANTHROPIC_MODEL` | Model name (e.g. `claude-haiku-20240307`, `Doubao-Seed-2.0-Code`) | — |
+| `ALLOWED_ORIGINS` | Comma-separated CORS allowlist (default: `http://localhost:${PORT}`) | — |
+| `REMINDER_CHECK_INTERVAL` | Reminder check tick (ms, default 60000) | — |
+| `EMAIL_SYNC_INTERVAL` | Email sync tick (ms, default 300000) | — |
+
+If `ENCRYPTION_KEY` is unset the server logs a warning at startup and falls back to plain JSON for token storage — fine for dev, set it for any persistent install.
+
+## Storage
+
+A single SQLite file: `aether.db` (created on first run, WAL mode). All tasks, projects, emails, sync state, news items, and LLM usage logs live here. Back up by copying the file when the server is stopped (or copy the `.db` + `.db-wal` + `.db-shm` triplet while running).
+
+For tests, set `AETHER_DB_PATH=:memory:` to route around the file.
+
+A migration script for the legacy JSON-storage format (`scripts/migrate-json-to-sqlite.js`) is kept in the repo only for historical interest — there's no `board.json` data to migrate in any new install.
+
+## Tech stack
+
+- **Backend**: Node.js, Express 4, better-sqlite3, zod, node-cron, axios, rss-parser
+- **Frontend**: vanilla HTML / CSS / JS — no framework, no bundler. Three Google Fonts (Source Serif Pro / Inter / JetBrains Mono).
+- **Tests**: `node:test` (Node 24+ built-in, no Jest / Mocha dependency).
+- **Storage**: SQLite via better-sqlite3.
+- **Auth**: OAuth 2.0 against Microsoft Graph for Outlook. Tokens encrypted at rest (AES-256-GCM) when `ENCRYPTION_KEY` is set.
+
+## Architecture
+
+Four-layer Express app: `routes/` → `services/` → `models/` → `db.js`. Background tasks (reminders, email sync, daily news cron, retention cleanup) run inside a single `services/ReminderService.js` singleton with phase-jittered timers.
+
+Engineering details — conventions, gotchas (e.g. Doubao "thinking" content blocks, custom encryption shape), validation patterns — are documented in [`CLAUDE.md`](CLAUDE.md). New contributors and AI agents should read that file before touching code.
+
+## Project layout
+
+```
+.
+├── server.js              # Express entry — mounts routes, owns shutdown
+├── db.js                  # SQLite schema, migrations, getDb() / closeDb()
+├── routes/                # 12 route files (tasks, projects, news, emails, llmUsage, …)
+├── services/              # ReminderService (timers), NewsService, EmailFilterService, DataCleanupService
+├── models/                # 1-table-per-file CRUD via prepared statements
+├── emailProviders/        # Provider abstraction + OutlookProvider
+├── middleware/            # validate(zodSchema, source), validateIdParam(name)
+├── utils/                 # safeJson, dateRange, encryption, envValidator, logger
+├── public/                # index.html + style.css + script.js  (vanilla, no build)
+├── test/                  # 33 tests, node:test
+├── docs/superpowers/      # Specs + plans (UI redesign, audits, future phases)
+├── scripts/               # One-shot migrations / utilities
+└── CLAUDE.md              # Engineering reference for AI agents
+```
+
+## API surface
+
+Routes are mounted at `/tasks`, `/projects`, `/activity`, `/emails`, `/news`, `/search`, `/notes`, `/goals`, `/focus`, `/templates`, `/stats`, `/llm-usage`. Each is a small, focused REST surface; see the corresponding file in `routes/` for the schema. A few highlights:
+
+- `GET /news` — today's selected items (LLM-filtered)
+- `POST /news/sync?force=true` — manually re-run the daily aggregation
+- `GET /llm-usage/summary` — today's calls/tokens, 7-day success rate, daily breakdown, by-model rollup
+- `GET /search?q=…` — unified search across tasks, emails, news (used by `⌘K`)
+- `GET /health` — liveness probe (200 + uptime)
+
+All `:id` route params are validated by `middleware/validateIdParam` (rejects non-positive integers with 400). Body and query schemas use `zod` via `middleware/validate`.
+
+## Status
+
+Phases 0–7 (foundation through bulk operations) and a four-cycle robustness audit (27 of 34 issues fixed) are complete. The most recent work is a Claude-style UI redesign and a switch from arXiv-based academic-paper recommendations to commercial-news aggregation. See [`docs/superpowers/`](docs/superpowers/) for the in-flight specs and plans.
+
+## License
+
+ISC. Personal project — feel free to copy patterns, fork, or learn from it. No support promised.
