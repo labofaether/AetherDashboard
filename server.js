@@ -8,6 +8,7 @@ const projectRoutes = require('./routes/projects');
 const activityRoutes = require('./routes/activity');
 const emailRoutes = require('./routes/emails');
 const newsRoutes = require('./routes/news');
+const llmUsageRoutes = require('./routes/llmUsage');
 const searchRoutes = require('./routes/search');
 const noteRoutes = require('./routes/notes');
 const goalRoutes = require('./routes/goals');
@@ -78,6 +79,7 @@ app.use('/goals', goalRoutes);
 app.use('/focus', focusRoutes);
 app.use('/templates', templateRoutes);
 app.use('/stats', statsRoutes);
+app.use('/llm-usage', llmUsageRoutes);
 
 // Global Express error handler — catches errors from route handlers,
 // middleware (incl. zod validation passing err to next()), and async throws.
