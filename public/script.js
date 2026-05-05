@@ -188,6 +188,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCurrentTime();
     setInterval(updateCurrentTime, 1000);
 
+    updateDashboardDate();
+    setInterval(updateDashboardDate, 60 * 60 * 1000);
+
     loadProjects();
     loadTasks();
     loadActivityLog();
@@ -216,6 +219,14 @@ function updateCurrentTime() {
     if (!el) return;
     const now = new Date();
     el.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function updateDashboardDate() {
+    const el = document.getElementById('dashboardDate');
+    if (!el) return;
+    const d = new Date();
+    const opts = { weekday: 'short', month: 'short', day: 'numeric' };
+    el.textContent = `Today — ${d.toLocaleDateString('en-US', opts)}`;
 }
 
 function setupModuleButtons() {
@@ -1709,15 +1720,7 @@ function isNotExpired(task) {
 function renderDashboard() {
     const filtered = getFilteredTasks();
 
-    const metaContainer = document.getElementById('dashboardMeta');
-    if (metaContainer) {
-        metaContainer.textContent = new Date().toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-    }
+    document.getElementById('dashboardMeta')?.textContent;  // element removed in v2; no-op kept for safety
 
     // Recent Tasks - only high priority, non-expired, non-completed tasks
     const recentTasks = [...filtered]

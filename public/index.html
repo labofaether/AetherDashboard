@@ -61,59 +61,53 @@
             <main class="main-content">
                 <div id="dashboardView" class="module-view">
                     <div class="dashboard-header">
-                        <h2 class="dashboard-title">Overview</h2>
-                        <div class="dashboard-meta" id="dashboardMeta"></div>
+                        <h2 class="dashboard-date" id="dashboardDate">Today</h2>
                     </div>
 
+                    <div class="dashboard-news-hero" id="dashboardNewsHero"></div>
+                    <div class="dashboard-news-secondary" id="dashboardNewsSecondary"></div>
 
-                    <div class="dashboard-content">
-                        <div class="dashboard-column">
-                            <div class="dashboard-section">
-                                <div class="section-header">
-                                    <h3 class="section-title">Tasks</h3>
-                                </div>
-                                <div class="subsection">
-                                    <h4 class="subsection-title">Recent</h4>
-                                    <div class="recent-tasks" id="recentTasks"></div>
-                                </div>
-                                <div class="subsection">
-                                    <h4 class="subsection-title">Upcoming Deadlines</h4>
-                                    <div class="upcoming-tasks" id="upcomingTasks"></div>
-                                </div>
+                    <div class="dashboard-grid-2x2">
+                        <div class="dashboard-section">
+                            <div class="section-header">
+                                <h3 class="section-title">Tasks</h3>
                             </div>
-
-                            <div class="dashboard-section">
-                                <div class="section-header">
-                                    <h3 class="section-title">Calendar</h3>
-                                </div>
-                                <div class="subsection">
-                                    <h4 class="subsection-title">Upcoming Meetings</h4>
-                                    <div class="upcoming-events" id="upcomingEvents"></div>
-                                </div>
+                            <div class="subsection">
+                                <h4 class="subsection-title">Recent</h4>
+                                <div class="recent-tasks" id="recentTasks"></div>
+                            </div>
+                            <div class="subsection">
+                                <h4 class="subsection-title">Upcoming Deadlines</h4>
+                                <div class="upcoming-tasks" id="upcomingTasks"></div>
                             </div>
                         </div>
 
-                        <div class="dashboard-column">
-                            <div class="dashboard-section">
-                                <div class="section-header">
-                                    <h3 class="section-title">Email</h3>
-                                </div>
-                                <div class="subsection">
-                                    <h4 class="subsection-title">Important</h4>
-                                    <div class="recent-emails" id="recentEmails"></div>
-                                </div>
+                        <div class="dashboard-section">
+                            <div class="section-header">
+                                <h3 class="section-title">Email</h3>
                             </div>
-
-
-                            <div class="dashboard-section">
-                                <div class="section-header">
-                                    <h3 class="section-title">Tech News</h3>
-                                    <button class="icon-btn-small" id="syncNewsBtn" title="Sync News">
-                                        <span>🔄</span>
-                                    </button>
-                                </div>
-                                <div class="daily-news" id="dailyNews"></div>
+                            <div class="subsection">
+                                <h4 class="subsection-title">Important</h4>
+                                <div class="recent-emails" id="recentEmails"></div>
                             </div>
+                        </div>
+
+                        <div class="dashboard-section">
+                            <div class="section-header">
+                                <h3 class="section-title">Calendar</h3>
+                            </div>
+                            <div class="subsection">
+                                <h4 class="subsection-title">Upcoming Meetings</h4>
+                                <div class="upcoming-events" id="upcomingEvents"></div>
+                            </div>
+                        </div>
+
+                        <div class="dashboard-section" id="aiUsageCard">
+                            <div class="section-header">
+                                <h3 class="section-title">AI Usage</h3>
+                                <span class="section-meta">Last 7 days</span>
+                            </div>
+                            <div class="ai-usage-body" id="aiUsageBody"></div>
                         </div>
                     </div>
                 </div>

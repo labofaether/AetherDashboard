@@ -441,32 +441,6 @@ code, pre, .mono, [class*="-mono"] {
 /* ================================
    Dashboard View
    ================================ */
-.dashboard-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-}
-
-.dashboard-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-}
-
-.dashboard-meta {
-    font-size: 13px;
-    color: var(--text-tertiary);
-    font-family: var(--font-mono);
-}
-
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
-}
 
 /* ================================
    Cards
@@ -528,40 +502,6 @@ code, pre, .mono, [class*="-mono"] {
     color: var(--text-tertiary);
 }
 
-.dashboard-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    flex: 1;
-    overflow: hidden;
-}
-
-.dashboard-column {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-right: 4px;
-}
-
-.dashboard-column::-webkit-scrollbar {
-    width: 8px;
-}
-
-.dashboard-column::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
-    border-radius: 4px;
-}
-
-.dashboard-column::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 4px;
-}
-
-.dashboard-column::-webkit-scrollbar-thumb:hover {
-    background: var(--text-tertiary);
-}
 
 .recent-tasks,
 .upcoming-tasks,
@@ -2304,11 +2244,6 @@ code, pre, .mono, [class*="-mono"] {
         padding: 16px;
     }
 
-    .dashboard-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-    }
-
     .email-container {
         flex-direction: column;
     }
@@ -2344,17 +2279,6 @@ code, pre, .mono, [class*="-mono"] {
 @media (max-width: 480px) {
     .main-content {
         padding: 12px;
-    }
-
-    .dashboard-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .dashboard-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
-        margin-bottom: 16px;
     }
 
     .board {
@@ -3476,3 +3400,53 @@ textarea::placeholder {
 }
 .checkbox:hover { border-color: var(--accent-hover); }
 .checkbox.checked:hover { background: var(--accent-hover); }
+
+/* ================================
+   Dashboard layout (v2)
+   ================================ */
+#dashboardView {
+    padding: var(--space-6);
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.dashboard-header { margin-bottom: var(--space-6); }
+.dashboard-date {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.dashboard-news-hero { margin-bottom: var(--space-4); }
+
+.dashboard-news-secondary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.dashboard-grid-2x2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-5);
+}
+
+.section-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+@media (max-width: 1279px) {
+    .dashboard-news-secondary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+    .dashboard-news-secondary { grid-template-columns: 1fr; }
+    .dashboard-grid-2x2 { grid-template-columns: 1fr; }
+}
