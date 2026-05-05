@@ -665,7 +665,7 @@ function formatTimeAgo(timestamp) {
 
 async function loadActivityLog() {
     try {
-        const response = await fetch(`${ACTIVITY_API_BASE}?limit=15`);
+        const response = await fetch(`${ACTIVITY_API_BASE}?limit=6`);
         if (response.ok) {
             const activities = await response.json();
             renderActivityLog(activities);
@@ -678,19 +678,21 @@ async function loadActivityLog() {
 function renderActivityLog(activities) {
     const list = document.getElementById('activityList');
     if (!activities || activities.length === 0) {
-        list.innerHTML = '<div class="no-activity">No recent activity...</div>';
+        list.innerHTML = '<div class="no-activity">No recent activity</div>';
         return;
     }
 
-    list.innerHTML = activities.map((activity, index) => `
-        <div class="activity-item">
-            <div class="activity-action">${formatActivityAction(activity.action)}</div>
-            <div class="activity-details">
-                ${activity.taskTitle ? escapeHtml(activity.taskTitle.substring(0, 40)) : (activity.details?.count ? `${activity.details.count} tasks` : '')}
-            </div>
-            <div class="activity-time">${formatTimeAgo(activity.timestamp)}</div>
-        </div>
-    `).join('');
+    list.innerHTML = activities.map(activity => {
+        const detail = activity.taskTitle
+            ? escapeHtml(activity.taskTitle.substring(0, 28))
+            : (activity.details?.count ? `${activity.details.count} tasks` : '');
+        return `
+            <div class="activity-item" title="${escapeHtml(formatActivityAction(activity.action))}${detail ? ' — ' + detail : ''}">
+                <span class="activity-action">${formatActivityAction(activity.action)}</span>
+                ${detail ? `<span class="activity-details">${detail}</span>` : ''}
+                <span class="activity-time">${formatTimeAgo(activity.timestamp)}</span>
+            </div>`;
+    }).join('');
 }
 
 function escapeHtml(text) {
