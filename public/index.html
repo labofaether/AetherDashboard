@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aether Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@400;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -195,12 +198,12 @@
 
                             <div class="dashboard-section">
                                 <div class="section-header">
-                                    <h3 class="section-title">Daily Papers</h3>
-                                    <button class="icon-btn-small" id="syncPapersBtn" title="Sync Papers">
+                                    <h3 class="section-title">Tech News</h3>
+                                    <button class="icon-btn-small" id="syncNewsBtn" title="Sync News">
                                         <span>🔄</span>
                                     </button>
                                 </div>
-                                <div class="daily-papers" id="dailyPapers"></div>
+                                <div class="daily-news" id="dailyNews"></div>
                             </div>
                         </div>
                     </div>
@@ -542,7 +545,7 @@
     <!-- Command Palette -->
     <div id="commandPalette" class="command-palette hidden">
         <div class="command-palette-content">
-            <input type="text" id="commandInput" class="command-input" placeholder="Search tasks, emails, papers..." autocomplete="off">
+            <input type="text" id="commandInput" class="command-input" placeholder="Search tasks, emails, news..." autocomplete="off">
             <div id="commandResults" class="command-results"></div>
             <div class="command-footer">
                 <span class="command-hint"><kbd>Esc</kbd> close</span>
