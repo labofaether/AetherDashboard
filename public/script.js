@@ -82,33 +82,6 @@ const safeStorage = {
     },
 };
 
-// --- Dark mode toggle ---
-function initTheme() {
-    const saved = safeStorage.get('theme');
-    if (saved === 'dark') {
-        document.documentElement.setAttribute('data-theme', 'dark');
-    }
-    updateThemeIcon();
-}
-
-function toggleTheme() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    if (isDark) {
-        document.documentElement.removeAttribute('data-theme');
-        safeStorage.set('theme', 'light');
-    } else {
-        document.documentElement.setAttribute('data-theme', 'dark');
-        safeStorage.set('theme', 'dark');
-    }
-    updateThemeIcon();
-}
-
-function updateThemeIcon() {
-    const btn = document.getElementById('themeToggle');
-    if (!btn) return;
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    btn.textContent = isDark ? '\u2600' : '\u263D';
-}
 
 // --- Mobile sidebar ---
 function toggleSidebar() {
@@ -187,16 +160,15 @@ async function pollDueReminders() {
     } catch (e) { /* silent */ }
 }
 
-// Init theme immediately
-initTheme();
-
 let allProjects = [];
 let selectedColor = '#10a37f';
 let calendarMonth = new Date();
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Theme & sidebar
-    document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
+    // One-time cleanup of stale dark-mode preference (theme toggle removed in v2 redesign).
+    try { localStorage.removeItem('theme'); } catch {}
+
+    // Sidebar
     document.getElementById('hamburgerBtn')?.addEventListener('click', toggleSidebar);
     document.getElementById('sidebarOverlay')?.addEventListener('click', closeSidebar);
 
