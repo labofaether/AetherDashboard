@@ -1889,7 +1889,6 @@ async function loadDailyNews() {
     try {
         const response = await fetch(NEWS_API_BASE);
         if (!response.ok) return;
-
         const data = await response.json();
         renderDailyNews(data.items || [], data.date);
     } catch (error) {
@@ -1897,77 +1896,69 @@ async function loadDailyNews() {
     }
 }
 
+function renderDailyNews(items, date) {
+    const heroEl = document.getElementById('dashboardNewsHero');
+    const secEl = document.getElementById('dashboardNewsSecondary');
+    if (!heroEl || !secEl) return;
+
+    if (!items || items.length === 0) {
+        heroEl.innerHTML = `
+            <div class="news-empty">
+                <p>No news for today yet.</p>
+                <button class="btn-secondary" onclick="syncNews()">Sync Now</button>
+            </div>`;
+        secEl.innerHTML = '';
+        return;
+    }
+
+    heroEl.innerHTML = renderNewsCard(items[0], { hero: true });
+    secEl.innerHTML = items.slice(1, 6).map(item => renderNewsCard(item, { hero: false })).join('');
+}
+
+function renderNewsCard(item, { hero }) {
+    const eventBadge = item.eventType
+        ? `<span class="news-event news-event-${escapeHtml(item.eventType.toLowerCase().replace(/[^a-z]/g, ''))}">${escapeHtml(item.eventType)}</span>`
+        : '';
+    const company = item.company ? `<span class="news-company">${escapeHtml(item.company)}</span>` : '';
+    const sourceLabel = item.source && item.source !== 'hackernews' ? item.source : '';
+    const titleSafe = escapeHtml(item.title);
+    const onclick = `newsToTask('${titleSafe.replace(/'/g, "\\'")}', '${escapeHtml(item.url || '')}')`;
+
+    return `
+        <a class="news-card${hero ? ' news-card-hero' : ''}" href="${escapeHtml(item.url || '#')}" target="_blank" rel="noopener noreferrer">
+            <div class="news-card-tags">${eventBadge}${company}</div>
+            <div class="news-card-title">${titleSafe}</div>
+            ${hero && item.summary ? `<div class="news-card-summary">${escapeHtml(item.summary)}</div>` : ''}
+            <div class="news-card-meta">
+                ${item.score ? `<span>▲ ${item.score}</span>` : ''}
+                ${item.commentCount ? `<span>💬 ${item.commentCount}</span>` : ''}
+                ${sourceLabel ? `<span>${escapeHtml(sourceLabel)}</span>` : ''}
+                <span>${formatNewsDate(item.publishedAt)}</span>
+                <button class="btn-ghost news-card-action" onclick="event.preventDefault();event.stopPropagation();${onclick}">+ Task</button>
+            </div>
+        </a>`;
+}
+
 async function syncNews() {
-    const container = document.getElementById('dailyNews');
-    if (!container) return;
-
-    container.innerHTML = '<div class="no-news">Syncing news...</div>';
-
+    const heroEl = document.getElementById('dashboardNewsHero');
+    if (!heroEl) return;
+    heroEl.innerHTML = '<div class="news-empty">Syncing news...</div>';
     try {
         const response = await fetch(`${NEWS_API_BASE}/sync?force=true`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-
         if (!response.ok) throw new Error('Sync failed');
-
         const data = await response.json();
-
         if (data.success) {
             await loadDailyNews();
         } else {
-            container.innerHTML = '<div class="no-news">Failed to sync news</div>';
+            heroEl.innerHTML = '<div class="news-empty">Failed to sync news</div>';
         }
     } catch (error) {
         console.error('Failed to sync news:', error);
-        container.innerHTML = '<div class="no-news">Failed to sync news</div>';
+        heroEl.innerHTML = '<div class="news-empty">Failed to sync news</div>';
     }
-}
-
-function renderDailyNews(items, date) {
-    const container = document.getElementById('dailyNews');
-    if (!container) return;
-
-    if (!items || items.length === 0) {
-        container.innerHTML = `
-            <div class="no-news">
-                No news for today yet.<br>
-                <button class="add-button" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="syncNews()">Sync Now</button>
-            </div>
-        `;
-        return;
-    }
-
-    const itemsHtml = items.map(item => {
-        const eventTypeBadge = item.eventType
-            ? `<span class="news-event news-event-${escapeHtml(item.eventType.toLowerCase().replace(/[^a-z]/g, ''))}">${escapeHtml(item.eventType)}</span>`
-            : '';
-        const sourceLabel = item.source && item.source !== 'hackernews' ? item.source : '';
-        return `
-        <div class="news-card">
-            <div class="news-header">
-                <div class="news-title">
-                    <a href="${escapeHtml(item.url || '#')}" target="_blank" rel="noopener noreferrer">
-                        ${escapeHtml(item.title)}
-                    </a>
-                </div>
-                <div class="news-tags">
-                    ${eventTypeBadge}
-                    ${item.company ? `<span class="news-company">${escapeHtml(item.company)}</span>` : ''}
-                </div>
-            </div>
-            ${item.summary ? `<div class="news-summary">${escapeHtml(item.summary)}</div>` : ''}
-            <div class="news-meta">
-                ${item.score ? `<span class="news-score">▲ ${item.score}</span>` : ''}
-                ${item.commentCount ? `<span class="news-comments">💬 ${item.commentCount}</span>` : ''}
-                ${sourceLabel ? `<span class="news-source">${escapeHtml(sourceLabel)}</span>` : ''}
-                <span class="news-date">${formatNewsDate(item.publishedAt)}</span>
-                <button class="task-action-btn move-btn" style="margin-left:auto;padding:2px 8px;font-size:11px;" onclick="newsToTask('${escapeHtml(item.title).replace(/'/g, "\\'")}', '${escapeHtml(item.url || '')}')">+ Task</button>
-            </div>
-        </div>`;
-    }).join('');
-
-    container.innerHTML = itemsHtml;
 }
 
 async function newsToTask(title, url) {

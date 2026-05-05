@@ -1810,82 +1810,64 @@ code, pre, .mono, [class*="-mono"] {
 }
 
 /* ================================
-   Tech News Section
+   News cards (hero + secondary)
    ================================ */
-.daily-news {
+.news-card {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    overflow-y: auto;
-    max-height: 400px;
-    padding-right: 4px;
-}
-
-.daily-news::-webkit-scrollbar {
-    width: 6px;
-}
-
-.daily-news::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
-    border-radius: 3px;
-}
-
-.daily-news::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 3px;
-}
-
-.daily-news::-webkit-scrollbar-thumb:hover {
-    background: var(--text-tertiary);
-}
-
-.news-card {
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
-    padding: 14px;
-    transition: all 0.15s ease;
+    gap: var(--space-2);
+    padding: var(--space-5);
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
     border: 1px solid transparent;
+    text-decoration: none;
+    color: inherit;
+    transition: var(--transition);
 }
-
 .news-card:hover {
-    background: var(--bg-tertiary);
-    border-color: var(--border-color);
+    border-color: var(--border);
+    box-shadow: var(--shadow-sm);
 }
 
-.news-header {
+.news-card-hero {
+    padding: var(--space-6) var(--space-7);
+    gap: var(--space-3);
+}
+
+.news-card-tags {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
+    gap: var(--space-2);
+    flex-wrap: wrap;
 }
 
-.news-title {
-    flex: 1;
-    font-size: 14px;
+.news-card-title {
+    font-family: var(--font-serif);
     font-weight: 600;
     color: var(--text-primary);
-    line-height: 1.4;
+    line-height: 1.3;
+    font-size: 15px;
+}
+.news-card-hero .news-card-title { font-size: 24px; letter-spacing: -0.01em; }
+
+.news-card-summary {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.55;
 }
 
-.news-title a {
-    color: var(--text-primary);
-    text-decoration: none;
-    transition: color 0.15s ease;
-}
-
-.news-title a:hover {
-    color: var(--accent);
-}
-
-.news-tags {
-    flex-shrink: 0;
+.news-card-meta {
     display: flex;
-    gap: 6px;
     align-items: center;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    gap: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: auto;
 }
+.news-card-meta > :last-child { margin-left: auto; }
+
+.news-card-action { padding: 2px 8px !important; font-size: 11px !important; }
 
 .news-company {
     flex-shrink: 0;
@@ -1917,6 +1899,16 @@ code, pre, .mono, [class*="-mono"] {
 .news-event-partnership{ background: rgba(20, 184, 166, 0.12); color: #0d9488; }
 .news-event-layoff    { background: rgba(244, 63, 94, 0.12);  color: #e11d48; }
 
+.news-empty {
+    padding: var(--space-6);
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+    text-align: center;
+    color: var(--text-tertiary);
+}
+.news-empty p { margin: 0 0 var(--space-3); }
+
 .priority-badge {
     display: inline-block;
     padding: 2px 8px;
@@ -1932,43 +1924,6 @@ code, pre, .mono, [class*="-mono"] {
 .priority-high     { background: rgba(184, 84, 80, 0.10);  color: var(--danger); }
 .priority-urgent   { background: rgba(184, 84, 80, 0.18);  color: var(--danger); border: 1px solid rgba(184, 84, 80, 0.3); }
 
-.news-source {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    text-transform: capitalize;
-}
-
-.news-summary {
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-    margin-bottom: 8px;
-}
-
-.news-meta {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 11px;
-    color: var(--text-tertiary);
-    font-family: var(--font-mono);
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-color);
-}
-
-.news-score, .news-comments, .news-date {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.no-news {
-    color: var(--text-tertiary);
-    font-size: 13px;
-    text-align: center;
-    padding: 20px;
-}
 
 /* ================================
    Command Palette
