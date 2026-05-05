@@ -84,8 +84,64 @@ function getLlmSyncStatus() {
     };
 }
 
+function getTodaySummary() {
+    const db = getDb();
+    const row = db.prepare(`
+        SELECT COUNT(*) AS calls, COALESCE(SUM(tokensUsed), 0) AS tokens
+        FROM llm_usage
+        WHERE DATE(timestamp, 'localtime') = DATE('now', 'localtime')
+    `).get();
+    return { calls: row.calls || 0, tokens: row.tokens || 0 };
+}
+
+function getSuccessRate(sinceISO) {
+    const db = getDb();
+    const row = db.prepare(`
+        SELECT AVG(success) AS rate, COUNT(*) AS n
+        FROM llm_usage
+        WHERE timestamp >= ?
+    `).get(sinceISO);
+    if (!row || row.n === 0) return null;
+    return row.rate;
+}
+
+function getLast7Days() {
+    const db = getDb();
+    const rows = db.prepare(`
+        SELECT DATE(timestamp, 'localtime') AS date, COUNT(*) AS calls
+        FROM llm_usage
+        WHERE timestamp >= DATE('now', '-6 days')
+        GROUP BY DATE(timestamp, 'localtime')
+    `).all();
+    const byDate = new Map(rows.map(r => [r.date, r.calls]));
+
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        out.push({ date: key, calls: byDate.get(key) || 0 });
+    }
+    return out;
+}
+
+function getByModel(sinceISO) {
+    const db = getDb();
+    return db.prepare(`
+        SELECT model, COUNT(*) AS calls, COALESCE(SUM(tokensUsed), 0) AS tokens
+        FROM llm_usage
+        WHERE timestamp >= ?
+        GROUP BY model
+        ORDER BY calls DESC
+    `).all(sinceISO);
+}
+
 module.exports = {
     logLlmCall,
     getLlmStats,
-    getLlmSyncStatus
+    getLlmSyncStatus,
+    getTodaySummary,
+    getSuccessRate,
+    getLast7Days,
+    getByModel,
 };
