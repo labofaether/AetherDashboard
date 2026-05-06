@@ -3474,13 +3474,8 @@ textarea::placeholder {
 
 .ai-usage-sparkline {
     width: 100%;
-    height: 56px;
+    height: 48px;
     overflow: visible;
-}
-.ai-usage-sparkline text {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    fill: var(--text-tertiary);
 }
 
 .ai-usage-models {

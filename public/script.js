@@ -2060,7 +2060,7 @@ function formatTokenCount(n) {
 
 function renderSparkline(days) {
     if (!days.length) return '';
-    const W = 200, H = 40, P = 4;
+    const W = 200, H = 44, P = 4;
     const max = Math.max(...days.map(d => d.calls), 1);
     const stepX = (W - 2 * P) / Math.max(days.length - 1, 1);
     const points = days.map((d, i) => {
@@ -2068,24 +2068,25 @@ function renderSparkline(days) {
         const y = H - P - (d.calls / max) * (H - 2 * P);
         return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
-    const labels = days.map((d, i) => {
-        const x = P + i * stepX;
-        const day = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' });
-        return `<text x="${x.toFixed(1)}" y="${H + 12}" text-anchor="middle">${day.slice(0,1)}</text>`;
-    }).join('');
 
+    // Per-dot tooltip via <title> — hover any point to see its date + count.
+    // No persistent text labels — header already says "Last 7 days" so per-day
+    // labels are redundant clutter (the previous M/T/W/T/F/S/S row had ambiguous
+    // duplicates and felt cramped).
     const dots = days.map((d, i) => {
         const x = P + i * stepX;
         const y = H - P - (d.calls / max) * (H - 2 * P);
         const isToday = i === days.length - 1;
-        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${isToday ? 3 : 2}" fill="var(--accent)" opacity="${isToday ? 1 : 0.6}"/>`;
+        const dateLabel = new Date(d.date).toLocaleDateString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric'
+        });
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${isToday ? 3 : 2}" fill="var(--accent)" opacity="${isToday ? 1 : 0.55}"><title>${dateLabel} · ${d.calls} calls</title></circle>`;
     }).join('');
 
     return `
-        <svg class="ai-usage-sparkline" viewBox="0 0 ${W} ${H + 16}" preserveAspectRatio="none">
-            <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="${points}"/>
+        <svg class="ai-usage-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+            <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="${points}"/>
             ${dots}
-            ${labels}
         </svg>`;
 }
 
