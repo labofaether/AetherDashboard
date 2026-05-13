@@ -1,4 +1,5 @@
 const { getDb } = require('../db');
+const { localDateNDaysAgo } = require('../utils/dateRange');
 
 function logLlmCall(provider, model, endpoint, method, success = true, tokensUsed = null) {
     const db = getDb();
@@ -117,9 +118,7 @@ function getLast7Days() {
 
     const out = [];
     for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
+        const key = localDateNDaysAgo(i);
         out.push({ date: key, calls: byDate.get(key) || 0 });
     }
     return out;
