@@ -76,6 +76,33 @@ class DataCleanupService {
         return result.changes;
     }
 
+    cleanupOldLlmUsage() {
+        const db = getDb();
+        const config = retentionConfig.llmUsage || { keepDays: 30 };
+        const cutoff = new Date(Date.now() - config.keepDays * 24 * 60 * 60 * 1000).toISOString();
+        const result = db.prepare('DELETE FROM llm_usage WHERE timestamp < ?').run(cutoff);
+        if (result.changes > 0) log.info(`Cleaned up ${result.changes} old llm_usage rows`);
+        return result.changes;
+    }
+
+    cleanupOldApiUsage() {
+        const db = getDb();
+        const config = retentionConfig.apiUsage || { keepDays: 30 };
+        const cutoff = new Date(Date.now() - config.keepDays * 24 * 60 * 60 * 1000).toISOString();
+        const result = db.prepare('DELETE FROM api_usage WHERE timestamp < ?').run(cutoff);
+        if (result.changes > 0) log.info(`Cleaned up ${result.changes} old api_usage rows`);
+        return result.changes;
+    }
+
+    cleanupOldNewsItems() {
+        const db = getDb();
+        const config = retentionConfig.news || { keepDays: 30 };
+        const cutoff = new Date(Date.now() - config.keepDays * 24 * 60 * 60 * 1000).toISOString();
+        const result = db.prepare('DELETE FROM news_items WHERE createdAt < ?').run(cutoff);
+        if (result.changes > 0) log.info(`Cleaned up ${result.changes} old news_items rows`);
+        return result.changes;
+    }
+
     cleanupCompletedTasks(olderThanDays = null) {
         const config = retentionConfig.completedTasks;
         if (!config.enabled && olderThanDays === null) return 0;
@@ -125,6 +152,9 @@ class DataCleanupService {
             totalRemoved += this.cleanupOldEvents();
             totalRemoved += this.cleanupOldReminders();
             totalRemoved += this.cleanupOldEmailFilters();
+            totalRemoved += this.cleanupOldLlmUsage();
+            totalRemoved += this.cleanupOldApiUsage();
+            totalRemoved += this.cleanupOldNewsItems();
             if (retentionConfig.completedTasks.enabled) {
                 totalRemoved += this.cleanupCompletedTasks();
             }

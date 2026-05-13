@@ -12,8 +12,21 @@ function getDb() {
     if (db) return db;
 
     db = new Database(dbPath);
-    if (dbPath !== ':memory:') db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
+    if (dbPath !== ':memory:') {
+        db.pragma('journal_mode = WAL');
+        // Desktop-app perf tuning: trade some crash-durability for speed
+        // (we're single-user on a Mac, not a bank ledger)
+        db.pragma('synchronous = NORMAL');
+        db.pragma('cache_size = -64000');         // ~64 MB page cache
+        db.pragma('mmap_size = 30000000');        // 30 MB memory-mapped I/O
+        db.pragma('temp_store = MEMORY');         // temp tables in RAM, not on disk
+        db.pragma('wal_autocheckpoint = 200');    // checkpoint every ~800 KB instead of ~4 MB
+        db.pragma('journal_size_limit = 10485760'); // hard-cap WAL at 10 MB
+        // One-shot truncate at boot — reins in WAL files that grew while the
+        // previous process held a long read.
+        try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { /* best-effort */ }
+    }
 
     initSchema();
     log.info('SQLite database initialized', { path: dbPath });

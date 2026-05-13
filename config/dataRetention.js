@@ -35,6 +35,23 @@ module.exports = {
         keepDays: 30
     },
 
+    // LLM call log: keep ~30 days of usage history (rolling cap also lives in
+    // models/LlmUsageModel.js LLM_USAGE_MAX_ROWS = 1000; the retention window
+    // applies on top, so whichever bound hits first wins).
+    llmUsage: {
+        keepDays: 30
+    },
+
+    // External API call log (Outlook, HN, RSS): same shape as llmUsage.
+    apiUsage: {
+        keepDays: 30
+    },
+
+    // News items: cron adds ~30/day; 30 days = ~900 rows max.
+    news: {
+        keepDays: 30
+    },
+
     // Cleanup schedule
     schedule: {
         // Light cleanup runs every hour (in ms)

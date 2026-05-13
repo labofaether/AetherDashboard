@@ -1,6 +1,22 @@
 const { getDb } = require('../db');
 const { localDateNDaysAgo } = require('../utils/dateRange');
 
+const LLM_USAGE_MAX_ROWS = 1000;
+// Batch the prune to amortize the DELETE cost; the DELETE…NOT IN subquery
+// scans the whole table, so running it on every insert was O(n) per write.
+const PRUNE_BATCH_SIZE = 50;
+let writesSincePrune = 0;
+
+function prune() {
+    const db = getDb();
+    db.prepare(`
+        DELETE FROM llm_usage WHERE id NOT IN (
+            SELECT id FROM llm_usage ORDER BY id DESC LIMIT ?
+        )
+    `).run(LLM_USAGE_MAX_ROWS);
+    writesSincePrune = 0;
+}
+
 function logLlmCall(provider, model, endpoint, method, success = true, tokensUsed = null) {
     const db = getDb();
     const now = new Date().toISOString();
@@ -8,12 +24,7 @@ function logLlmCall(provider, model, endpoint, method, success = true, tokensUse
         'INSERT INTO llm_usage (provider, model, endpoint, method, success, tokensUsed, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(provider, model, endpoint, method, success ? 1 : 0, tokensUsed, now);
 
-    // Keep only last 1000
-    db.prepare(`
-        DELETE FROM llm_usage WHERE id NOT IN (
-            SELECT id FROM llm_usage ORDER BY id DESC LIMIT 1000
-        )
-    `).run();
+    if (++writesSincePrune >= PRUNE_BATCH_SIZE) prune();
 
     return { id: result.lastInsertRowid, provider, model, endpoint, method, success, tokensUsed, timestamp: now };
 }
@@ -143,4 +154,7 @@ module.exports = {
     getSuccessRate,
     getLast7Days,
     getByModel,
+    prune,
+    LLM_USAGE_MAX_ROWS,
+    PRUNE_BATCH_SIZE,
 };
