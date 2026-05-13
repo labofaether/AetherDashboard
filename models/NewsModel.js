@@ -42,6 +42,15 @@ function getNewsBySourceId(sourceId) {
     return rowToItem(db.prepare('SELECT * FROM news_items WHERE sourceId = ?').get(sourceId));
 }
 
+// Returns a Set of sourceId strings seen within the last `days` days. Used by
+// NewsService.fetchAndEvaluate to dedupe before spending an LLM call per item.
+function getRecentSourceIds(days = 7) {
+    const db = getDb();
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const rows = db.prepare('SELECT sourceId FROM news_items WHERE createdAt >= ?').all(cutoff);
+    return new Set(rows.map(r => r.sourceId));
+}
+
 function saveNews(itemData) {
     const db = getDb();
     const existing = db.prepare('SELECT id FROM news_items WHERE sourceId = ?').get(itemData.sourceId);
@@ -133,6 +142,7 @@ module.exports = {
     getTodaysNews,
     getNewsById,
     getNewsBySourceId,
+    getRecentSourceIds,
     saveNews,
     saveNewsBatch,
     markAsDisplayed,
