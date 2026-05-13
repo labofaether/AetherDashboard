@@ -21,40 +21,64 @@ function logLlmCall(provider, model, endpoint, method, success = true, tokensUse
 function getLlmStats(hours = 24) {
     const db = getDb();
     const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-    const recent = db.prepare('SELECT * FROM llm_usage WHERE timestamp >= ?').all(since);
 
-    const stats = {
-        totalCalls: recent.length,
-        successfulCalls: recent.filter(e => e.success).length,
-        failedCalls: recent.filter(e => !e.success).length,
-        totalTokens: recent.filter(e => e.tokensUsed).reduce((sum, e) => sum + e.tokensUsed, 0),
-        byModel: {},
-        byEndpoint: {},
-        callsByHour: []
-    };
+    // Aggregate scalar totals + by-model + by-endpoint in three small queries
+    // instead of dragging every row into JS and looping.
+    const totals = db.prepare(`
+        SELECT
+            COUNT(*) AS totalCalls,
+            COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS successfulCalls,
+            COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS failedCalls,
+            COALESCE(SUM(tokensUsed), 0) AS totalTokens
+        FROM llm_usage WHERE timestamp >= ?
+    `).get(since);
 
-    recent.forEach(e => {
-        const modelKey = e.model || 'unknown';
-        const endpointKey = e.endpoint || 'unknown';
-        stats.byModel[modelKey] = (stats.byModel[modelKey] || 0) + 1;
-        stats.byEndpoint[endpointKey] = (stats.byEndpoint[endpointKey] || 0) + 1;
-    });
+    const byModelRows = db.prepare(`
+        SELECT COALESCE(model, 'unknown') AS k, COUNT(*) AS n
+        FROM llm_usage WHERE timestamp >= ? GROUP BY k
+    `).all(since);
+    const byEndpointRows = db.prepare(`
+        SELECT COALESCE(endpoint, 'unknown') AS k, COUNT(*) AS n
+        FROM llm_usage WHERE timestamp >= ? GROUP BY k
+    `).all(since);
 
+    const byModel = {};
+    byModelRows.forEach(r => { byModel[r.k] = r.n; });
+    const byEndpoint = {};
+    byEndpointRows.forEach(r => { byEndpoint[r.k] = r.n; });
+
+    // Hour buckets via SQL (strftime '%Y-%m-%dT%H' bucket key).
+    const bucketRows = db.prepare(`
+        SELECT
+            strftime('%Y-%m-%dT%H', timestamp) AS bucket,
+            COUNT(*) AS count,
+            COALESCE(SUM(tokensUsed), 0) AS tokens
+        FROM llm_usage WHERE timestamp >= ?
+        GROUP BY bucket
+    `).all(since);
+    const byBucket = new Map(bucketRows.map(r => [r.bucket, r]));
+
+    const callsByHour = [];
     for (let i = hours - 1; i >= 0; i--) {
         const hourStart = new Date(Date.now() - i * 60 * 60 * 1000);
-        const hourEnd = new Date(Date.now() - (i - 1) * 60 * 60 * 1000);
-        const filtered = recent.filter(e => {
-            const t = new Date(e.timestamp);
-            return t >= hourStart && t < hourEnd;
-        });
-        stats.callsByHour.push({
+        const key = hourStart.toISOString().slice(0, 13); // 'YYYY-MM-DDTHH'
+        const row = byBucket.get(key);
+        callsByHour.push({
             hour: hourStart.getHours(),
-            count: filtered.length,
-            tokens: filtered.filter(e => e.tokensUsed).reduce((sum, e) => sum + e.tokensUsed, 0)
+            count: row ? row.count : 0,
+            tokens: row ? row.tokens : 0,
         });
     }
 
-    return stats;
+    return {
+        totalCalls: totals.totalCalls,
+        successfulCalls: totals.successfulCalls,
+        failedCalls: totals.failedCalls,
+        totalTokens: totals.totalTokens,
+        byModel,
+        byEndpoint,
+        callsByHour,
+    };
 }
 
 function getLlmSyncStatus() {

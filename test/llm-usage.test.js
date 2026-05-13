@@ -80,3 +80,20 @@ test('getByModel groups by model', () => {
     assert.equal(a.calls, 2);
     assert.equal(a.tokens, 300);
 });
+
+test('getLlmStats aggregates totals + buckets in SQL', () => {
+    insertCall({ tokens: 100 });
+    insertCall({ tokens: 50, success: 0 });
+    insertCall({ model: 'B', tokens: 200 });
+
+    const stats = LlmUsageModel.getLlmStats(24);
+    assert.equal(stats.totalCalls, 3);
+    assert.equal(stats.successfulCalls, 2);
+    assert.equal(stats.failedCalls, 1);
+    assert.equal(stats.totalTokens, 350);
+    assert.equal(Object.keys(stats.byModel).length, 2); // m1, B
+    assert.equal(stats.callsByHour.length, 24);
+    // Sum of bucket counts must equal totalCalls
+    const sum = stats.callsByHour.reduce((a, b) => a + b.count, 0);
+    assert.equal(sum, 3);
+});
