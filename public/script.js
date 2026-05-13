@@ -186,7 +186,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupNewsButtons();
 
     updateCurrentTime();
-    setInterval(updateCurrentTime, 1000);
+    // Topbar clock shows HH:mm only; updating every second wastes paint cycles.
+    // 30s is well within "looks current" for a minute-precision display.
+    setInterval(updateCurrentTime, 30 * 1000);
 
     updateDashboardDate();
     setInterval(updateDashboardDate, 60 * 60 * 1000);
@@ -200,7 +202,9 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSyncStatus();
     loadDailyNews();
     loadAiUsage();
-    setInterval(loadActivityLog, 5000);
+    // Activity log used to refresh every 5s — far faster than the user can
+    // generate new activity. 30s is plenty.
+    setInterval(loadActivityLog, 30 * 1000);
     setInterval(() => {
         loadEmails();
         loadImportantEmails();
@@ -209,6 +213,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loadDailyNews();
         loadAiUsage();
     }, 60000);
+    // Single global tick for all task-card countdowns (was one setInterval per
+    // task — 100 tasks × 1s ticks). 30s precision is fine for "5h 32m" labels.
+    setInterval(updateAllCountdowns, 30 * 1000);
 
     // Browser notifications
     requestNotificationPermission();
@@ -252,14 +259,8 @@ function setupVideoAgentButton() {
 }
 
 function switchModule(module) {
-    // Tear down per-view timers from the previous module before switching.
-    // Without this, countdowns on board cards keep ticking against detached/hidden
-    // nodes — wasted CPU and a slow leak as renderTasks pushes new ones each refresh.
-    if (currentModule !== module) {
-        _countdownIntervals.forEach(id => clearInterval(id));
-        _countdownIntervals = [];
-    }
-
+    // Countdowns now render via a single global tick (updateAllCountdowns)
+    // that walks data-due elements; no per-view teardown needed.
     currentModule = module;
     // Support .sidebar-item, .module-btn, and .nav-item for navigation
     document.querySelectorAll('.sidebar-item, .module-btn, .nav-item').forEach(btn => {
@@ -414,6 +415,15 @@ function getProject(projectId) {
 function renderProjects() {
     const list = document.getElementById('projectList');
     if (!list) return;
+
+    // Pre-bucket tasks by projectId once instead of running .filter() per project
+    // (was O(projects × tasks) on every sidebar redraw).
+    const tasksByProject = new Map();
+    for (const t of allTasks) {
+        const k = t.projectId;
+        tasksByProject.set(k, (tasksByProject.get(k) || 0) + 1);
+    }
+
     let html = `
         <div class="project-item ${currentProjectId === 'all' ? 'active' : ''}" data-project-id="all">
             <span class="project-color" style="background: #10a37f"></span>
@@ -423,12 +433,12 @@ function renderProjects() {
     `;
 
     allProjects.forEach(project => {
-        const projectTasks = allTasks.filter(t => t.projectId === project.id);
+        const count = tasksByProject.get(project.id) || 0;
         html += `
             <div class="project-item ${currentProjectId === project.id ? 'active' : ''}" data-project-id="${project.id}">
                 <span class="project-color" style="background: ${project.color}"></span>
                 <span class="project-name">${escapeHtml(project.name)}</span>
-                <span class="project-count">${projectTasks.length}</span>
+                <span class="project-count">${count}</span>
             </div>
         `;
     });
@@ -721,12 +731,15 @@ function setHtml(id, html) {
     if (el) el.innerHTML = html;
 }
 
-let _countdownIntervals = [];
+// Walks every countdown DOM node and refreshes its label from data-due.
+// One global setInterval drives this — beats one setInterval per task card.
+function updateAllCountdowns() {
+    document.querySelectorAll('.task-countdown[data-due]').forEach(el => {
+        updateCountdown(el, el.dataset.due);
+    });
+}
 
 function renderTasks(tasks) {
-    // Clear previous countdown intervals to prevent memory leaks
-    _countdownIntervals.forEach(id => clearInterval(id));
-    _countdownIntervals = [];
 
     const todoList = document.getElementById('todoList');
     const doingList = document.getElementById('doingList');
@@ -957,8 +970,9 @@ function createTaskElement(taskId, taskText, priority, dueDate, status, descript
     const countdown = document.createElement('span');
     countdown.className = 'task-countdown';
     if (dueDate) {
+        // Tag the node so the global updateAllCountdowns tick can refresh it.
+        countdown.dataset.due = dueDate;
         updateCountdown(countdown, dueDate);
-        _countdownIntervals.push(setInterval(() => updateCountdown(countdown, dueDate), 1000));
     } else {
         countdown.textContent = '';
     }

@@ -517,13 +517,15 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
-    <script src="js/quickCapture.js"></script>
-    <script src="js/focusMode.js"></script>
-    <script src="js/todayView.js"></script>
-    <script src="js/eisenhower.js"></script>
-    <script src="js/stickyNotes.js"></script>
-    <script src="js/goalTracking.js"></script>
-    <script src="js/taskTemplates.js"></script>
+    <!-- defer: HTML parsing isn't blocked by 88KB script.js + 6 module files;
+         execution order is preserved (matches the implicit prior order) -->
+    <script defer src="script.js"></script>
+    <script defer src="js/quickCapture.js"></script>
+    <script defer src="js/focusMode.js"></script>
+    <script defer src="js/todayView.js"></script>
+    <script defer src="js/eisenhower.js"></script>
+    <script defer src="js/stickyNotes.js"></script>
+    <script defer src="js/goalTracking.js"></script>
+    <script defer src="js/taskTemplates.js"></script>
 </body>
 </html>
