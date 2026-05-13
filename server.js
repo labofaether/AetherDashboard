@@ -16,6 +16,7 @@ const focusRoutes = require('./routes/focus');
 const templateRoutes = require('./routes/templates');
 const statsRoutes = require('./routes/stats');
 const cors = require('cors');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const reminderService = require('./services/ReminderService');
 const { closeDb } = require('./db');
@@ -34,6 +35,10 @@ app.use(cors({
         cb(new Error('Not allowed by CORS'));
     }
 }));
+
+// gzip JSON + static assets. Negligible CPU cost on a desktop, ~3-5x smaller
+// payloads for the dashboard's combined /tasks + /emails + /news fan-out.
+app.use(compression());
 
 app.use(express.json());
 
@@ -67,7 +72,14 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Static assets: send etag + 1h cache so the browser can revalidate cheaply
+// (script.js / style.css are 88KB / 71KB; before this they were re-fetched
+// fresh on every reload).
+app.use(express.static(path.join(__dirname, 'public'), {
+    etag: true,
+    lastModified: true,
+    maxAge: '1h',
+}));
 app.use('/tasks', taskRoutes);
 app.use('/projects', projectRoutes);
 app.use('/activity', activityRoutes);
