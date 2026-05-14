@@ -1,5 +1,19 @@
 const { getDb } = require('../db');
 
+const API_USAGE_MAX_ROWS = 1000;
+const PRUNE_BATCH_SIZE = 50;
+let writesSincePrune = 0;
+
+function prune() {
+    const db = getDb();
+    db.prepare(`
+        DELETE FROM api_usage WHERE id NOT IN (
+            SELECT id FROM api_usage ORDER BY id DESC LIMIT ?
+        )
+    `).run(API_USAGE_MAX_ROWS);
+    writesSincePrune = 0;
+}
+
 function logApiCall(provider, endpoint, method, success = true) {
     const db = getDb();
     const now = new Date().toISOString();
@@ -7,12 +21,7 @@ function logApiCall(provider, endpoint, method, success = true) {
         'INSERT INTO api_usage (provider, endpoint, method, success, timestamp) VALUES (?, ?, ?, ?, ?)'
     ).run(provider, endpoint, method, success ? 1 : 0, now);
 
-    // Keep only last 1000
-    db.prepare(`
-        DELETE FROM api_usage WHERE id NOT IN (
-            SELECT id FROM api_usage ORDER BY id DESC LIMIT 1000
-        )
-    `).run();
+    if (++writesSincePrune >= PRUNE_BATCH_SIZE) prune();
 
     return { id: result.lastInsertRowid, provider, endpoint, method, success, timestamp: now };
 }
@@ -67,5 +76,8 @@ function getSyncStatus() {
 module.exports = {
     logApiCall,
     getApiStats,
-    getSyncStatus
+    getSyncStatus,
+    prune,
+    API_USAGE_MAX_ROWS,
+    PRUNE_BATCH_SIZE,
 };
