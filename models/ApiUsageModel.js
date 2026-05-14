@@ -30,33 +30,49 @@ function getApiStats(hours = 24) {
     const db = getDb();
     const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
-    const recent = db.prepare('SELECT * FROM api_usage WHERE timestamp >= ?').all(since);
+    const totals = db.prepare(`
+        SELECT
+            COUNT(*) AS totalCalls,
+            COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS successfulCalls,
+            COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) AS failedCalls
+        FROM api_usage WHERE timestamp >= ?
+    `).get(since);
 
-    const stats = {
-        totalCalls: recent.length,
-        successfulCalls: recent.filter(e => e.success).length,
-        failedCalls: recent.filter(e => !e.success).length,
-        byProvider: {},
-        byEndpoint: {},
-        callsByHour: []
-    };
+    const byProviderRows = db.prepare(`
+        SELECT provider AS k, COUNT(*) AS n
+        FROM api_usage WHERE timestamp >= ? GROUP BY k
+    `).all(since);
+    const byEndpointRows = db.prepare(`
+        SELECT endpoint AS k, COUNT(*) AS n
+        FROM api_usage WHERE timestamp >= ? GROUP BY k
+    `).all(since);
 
-    recent.forEach(e => {
-        stats.byProvider[e.provider] = (stats.byProvider[e.provider] || 0) + 1;
-        stats.byEndpoint[e.endpoint] = (stats.byEndpoint[e.endpoint] || 0) + 1;
-    });
+    const byProvider = {};
+    byProviderRows.forEach(r => { byProvider[r.k] = r.n; });
+    const byEndpoint = {};
+    byEndpointRows.forEach(r => { byEndpoint[r.k] = r.n; });
 
+    const bucketRows = db.prepare(`
+        SELECT strftime('%Y-%m-%dT%H', timestamp) AS bucket, COUNT(*) AS count
+        FROM api_usage WHERE timestamp >= ? GROUP BY bucket
+    `).all(since);
+    const byBucket = new Map(bucketRows.map(r => [r.bucket, r.count]));
+
+    const callsByHour = [];
     for (let i = hours - 1; i >= 0; i--) {
         const hourStart = new Date(Date.now() - i * 60 * 60 * 1000);
-        const hourEnd = new Date(Date.now() - (i - 1) * 60 * 60 * 1000);
-        const count = recent.filter(e => {
-            const t = new Date(e.timestamp);
-            return t >= hourStart && t < hourEnd;
-        }).length;
-        stats.callsByHour.push({ hour: hourStart.getHours(), count });
+        const key = hourStart.toISOString().slice(0, 13);
+        callsByHour.push({ hour: hourStart.getHours(), count: byBucket.get(key) || 0 });
     }
 
-    return stats;
+    return {
+        totalCalls: totals.totalCalls,
+        successfulCalls: totals.successfulCalls,
+        failedCalls: totals.failedCalls,
+        byProvider,
+        byEndpoint,
+        callsByHour,
+    };
 }
 
 function getSyncStatus() {
