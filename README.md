@@ -29,10 +29,11 @@ Open http://localhost:3000 in your browser. The dashboard works without any exte
 ### Run the test suite
 
 ```bash
-npm test
+npm test           # unit + integration, ~200ms, no browser
+npm run test:e2e   # boots a fresh server in Playwright; needs `npx playwright install chromium` once
 ```
 
-Uses Node's built-in `node:test` runner. Tests run against an in-memory SQLite (no fixture cleanup needed).
+`npm test` uses Node's built-in `node:test` runner against an in-memory SQLite (no fixture cleanup needed). `npm run test:e2e` exercises the dashboard end-to-end and asserts no console errors or failed requests — designed to catch regressions like missing-function ReferenceErrors that unit tests can't see.
 
 ## Configuration
 
