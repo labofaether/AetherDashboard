@@ -24,27 +24,27 @@ const UNIMPORTANT_KEYWORDS = [
     'thank you for your order', 'your order has shipped'
 ];
 
+// Compile once at module load — `.some(includes)` was running ~30 string
+// scans per email. Single regex test does the same work in one pass.
+const escapeRx = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const IMPORTANT_RX = new RegExp(IMPORTANT_KEYWORDS.map(escapeRx).join('|'), 'i');
+const UNIMPORTANT_RX = new RegExp(UNIMPORTANT_KEYWORDS.map(escapeRx).join('|'), 'i');
+
 function heuristicFilter(email) {
-    const subject = (email.subject || '').toLowerCase();
-    const preview = (email.bodyPreview || '').toLowerCase();
-    const from = (email.from || '').toLowerCase();
+    const subject = email.subject || '';
+    const preview = email.bodyPreview || '';
+    const from = email.from || '';
     const importance = (email.importance || '').toLowerCase();
 
     if (importance === 'high') {
         return { important: true, reason: 'provider_flagged_high', confidence: 0.9 };
     }
 
-    const hasImportantKeyword = IMPORTANT_KEYWORDS.some(kw =>
-        subject.includes(kw) || preview.includes(kw)
-    );
-    if (hasImportantKeyword) {
+    if (IMPORTANT_RX.test(subject) || IMPORTANT_RX.test(preview)) {
         return { important: true, reason: 'keyword_match', confidence: 0.7 };
     }
 
-    const hasUnimportantKeyword = UNIMPORTANT_KEYWORDS.some(kw =>
-        subject.includes(kw) || preview.includes(kw) || from.includes(kw)
-    );
-    if (hasUnimportantKeyword) {
+    if (UNIMPORTANT_RX.test(subject) || UNIMPORTANT_RX.test(preview) || UNIMPORTANT_RX.test(from)) {
         return { important: false, reason: 'spam_keyword', confidence: 0.8 };
     }
 
@@ -79,34 +79,44 @@ async function callLLMForFilter(email) {
     try {
         const apiUrl = baseUrl.includes('/v1/messages') ? baseUrl : `${baseUrl}/v1/messages`;
         const response = await axios.post(apiUrl, {
-            model, max_tokens: 50, temperature: 0,
+            // Doubao thinking blocks burn through tight budgets; 256 leaves
+            // headroom for thinking + the tiny JSON answer.
+            model, max_tokens: 256, temperature: 0,
             messages: [{ role: 'user', content: prompt }]
         }, {
             headers: {
                 'x-api-key': apiKey,
                 'anthropic-version': '2023-06-01',
                 'content-type': 'application/json'
-            }
+            },
+            timeout: 15000
         });
 
         const tokensUsed = response.data.usage?.total_tokens || null;
-        const content = response.data.content[0]?.text || '';
+        // Same Doubao thinking-block scan as NewsService.
+        const blocks = Array.isArray(response.data.content) ? response.data.content : [];
+        const textBlock = blocks.find(b => b?.type === 'text' && b.text);
+        const thinkingBlock = blocks.find(b => b?.type === 'thinking' && b.thinking);
+        const content = textBlock?.text
+            || response.data.choices?.[0]?.message?.content
+            || thinkingBlock?.thinking
+            || '';
 
-        try {
-            const jsonMatch = content.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
+        // Single log point — was 3 separate logLlmCall sites for 3 return paths.
+        LlmUsageModel.logLlmCall('volcano', model, '/messages', 'POST', true, tokensUsed);
+
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
                 const result = JSON.parse(jsonMatch[0]);
-                LlmUsageModel.logLlmCall('volcano', model, '/messages', 'POST', true, tokensUsed);
                 return { important: result.important === true, reason: 'llm_classified', confidence: 0.85 };
-            }
-        } catch (e) {
-            if (content.toLowerCase().includes('true')) {
-                LlmUsageModel.logLlmCall('volcano', model, '/messages', 'POST', true, tokensUsed);
-                return { important: true, reason: 'llm_parsed', confidence: 0.7 };
+            } catch (e) {
+                // fall through to text inspection
             }
         }
-
-        LlmUsageModel.logLlmCall('volcano', model, '/messages', 'POST', true, tokensUsed);
+        if (content.toLowerCase().includes('true')) {
+            return { important: true, reason: 'llm_parsed', confidence: 0.7 };
+        }
         return { important: false, reason: 'llm_fallback', confidence: 0.5 };
 
     } catch (error) {

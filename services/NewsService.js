@@ -206,7 +206,10 @@ async function evaluateWithLLM(item) {
                 'anthropic-version': '2023-06-01',
                 'content-type': 'application/json'
             },
-            timeout: newsConfig.rss.timeout
+            // Cap LLM call at 15s — well under the 30s used for RSS feeds; the
+            // model can timeout into a thinking spiral and the news cron must
+            // still complete before the next 8am run.
+            timeout: 15000
         });
 
         const tokensUsed = response.data.usage?.total_tokens || null;
@@ -256,6 +259,21 @@ async function evaluateWithLLM(item) {
 // ============================================================
 // Pipeline: fetch → evaluate → save
 // ============================================================
+// Tiny concurrency-limited Promise.all; avoids pulling in a dep for 8 lines.
+async function pMapWithLimit(items, limit, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    async function worker() {
+        while (true) {
+            const i = next++;
+            if (i >= items.length) return;
+            out[i] = await fn(items[i], i);
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
+}
+
 async function fetchAndEvaluate() {
     // Fan out to all sources in parallel; any individual failure is logged and
     // the others still succeed (RSS feeds especially can be flaky).
@@ -269,15 +287,29 @@ async function fetchAndEvaluate() {
     const all = [...hnItems, ...rssItems];
     log.info(`News fetch complete`, { hn: hnItems.length, rss: rssItems.length, total: all.length });
 
+    // Pre-load sourceIds we already evaluated this week so we skip the LLM call
+    // for known stories without doing one SELECT per item.
+    const knownIds = NewsModel.getRecentSourceIds(7);
+
+    // Fast pass: re-emit anything already scored as worthPushing; queue the
+    // rest for LLM evaluation.
+    const fresh = [];
     const evaluated = [];
     for (const story of all) {
-        const existing = NewsModel.getNewsBySourceId(story.sourceId);
-        if (existing) {
-            if (existing.worthPushing) evaluated.push(existing);
+        if (knownIds.has(story.sourceId)) {
+            const existing = NewsModel.getNewsBySourceId(story.sourceId);
+            if (existing && existing.worthPushing) evaluated.push(existing);
             continue;
         }
+        fresh.push(story);
+    }
 
-        const verdict = await evaluateWithLLM(story);
+    // Evaluate with concurrency 3 — Doubao tolerates this; we still get most
+    // of the throughput gain and avoid hammering on retries.
+    const verdicts = await pMapWithLimit(fresh, 3, evaluateWithLLM);
+
+    fresh.forEach((story, i) => {
+        const verdict = verdicts[i];
         const itemData = {
             sourceId: story.sourceId,
             source: story.source,
@@ -297,10 +329,7 @@ async function fetchAndEvaluate() {
         const id = NewsModel.saveNews(itemData);
         const saved = NewsModel.getNewsById(id);
         if (saved && saved.worthPushing) evaluated.push(saved);
-
-        // Throttle so we don't hammer the LLM endpoint.
-        await new Promise(resolve => setTimeout(resolve, 250));
-    }
+    });
     return evaluated;
 }
 
