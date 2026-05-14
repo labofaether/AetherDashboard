@@ -1782,9 +1782,6 @@ function renderDashboard() {
     // Upcoming Meetings
     renderUpcomingEvents();
 
-    // Sync Status and LLM Status
-    renderSyncStatus();
-    renderLlmSyncStatus();
 }
 
 function renderRecentEmails() {

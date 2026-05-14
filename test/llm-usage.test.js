@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { resetDb } = require('./helpers/setup');
 const { getDb } = require('../db');
 const LlmUsageModel = require('../models/LlmUsageModel');
+const { todayLocal } = require('../utils/dateRange');
 
 beforeEach(() => resetDb());
 
@@ -54,9 +55,17 @@ test('getLast7Days returns array of 7 day-buckets', () => {
     assert.equal(r.length, 7);
     assert.ok(r.every(d => typeof d.date === 'string' && typeof d.calls === 'number'));
     // Today's bucket should have 2
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     const todayBucket = r.find(d => d.date === today);
     assert.equal(todayBucket.calls, 2);
+});
+
+test('getLast7Days returns zero-filled buckets when empty', () => {
+    const r = LlmUsageModel.getLast7Days();
+    assert.equal(r.length, 7);
+    assert.ok(r.every(d => d.calls === 0));
+    // last entry is today, first is 6 days ago
+    assert.equal(r[6].date, todayLocal());
 });
 
 test('getByModel groups by model', () => {
