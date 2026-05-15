@@ -1,7 +1,6 @@
 const { getDb } = require('../db');
 const emailConfig = require('../config/emailProviders');
 const OutlookProvider = require('../emailProviders/OutlookProvider');
-const dataCleanupService = require('../services/DataCleanupService');
 const log = require('../utils/logger');
 const { encrypt, decrypt } = require('../utils/encryption');
 
@@ -245,10 +244,6 @@ async function syncEmails(providerType) {
     }
     updateSyncState(providerType, updateData);
     persistRefreshedTokens(providerType, provider);
-
-    try { dataCleanupService.cleanupOldEmails(); } catch (error) {
-        log.error('Error cleaning up old emails after sync', { error: error.message });
-    }
 
     return newCount;
 }

@@ -1,6 +1,6 @@
 const express = require('express');
 const { z } = require('zod');
-const { getDb } = require('../db');
+const { searchAll } = require('../models/SearchModel');
 const { validate } = require('../middleware/validate');
 const log = require('../utils/logger');
 const router = express.Router();
@@ -15,23 +15,7 @@ router.get('/', validate(searchQuerySchema, 'query'), (req, res) => {
         const q = req.query.q.trim();
         if (!q) return res.json({ tasks: [], emails: [], news: [] });
 
-        const limit = req.query.limit;
-        const db = getDb();
-        const pattern = `%${q}%`;
-
-        const tasks = db.prepare(
-            'SELECT * FROM tasks WHERE title LIKE ? OR description LIKE ? ORDER BY id DESC LIMIT ?'
-        ).all(pattern, pattern, limit);
-
-        const emails = db.prepare(
-            'SELECT * FROM emails WHERE subject LIKE ? OR bodyPreview LIKE ? ORDER BY receivedAt DESC LIMIT ?'
-        ).all(pattern, pattern, limit).map(r => ({ ...r, isRead: !!r.isRead }));
-
-        const news = db.prepare(
-            'SELECT * FROM news_items WHERE title LIKE ? OR summary LIKE ? ORDER BY publishedAt DESC LIMIT ?'
-        ).all(pattern, pattern, limit).map(r => ({ ...r, worthPushing: !!r.worthPushing }));
-
-        res.json({ tasks, emails, news });
+        res.json(searchAll(q, req.query.limit));
     } catch (error) {
         log.error('Search error', { error: error.message });
         res.status(500).json({ error: 'Search failed' });
