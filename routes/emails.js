@@ -6,21 +6,11 @@ const EmailModel = require('../models/EmailModel');
 const ApiUsageModel = require('../models/ApiUsageModel');
 const LlmUsageModel = require('../models/LlmUsageModel');
 const EmailFilterService = require('../services/EmailFilterService');
+const oauthStateStore = require('../services/OauthStateStore');
 const emailConfig = require('../config/emailProviders');
 const { validate } = require('../middleware/validate');
 const { validateIdParam } = require('../middleware/validateIdParam');
 const log = require('../utils/logger');
-
-const oauthStates = new Map();
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const OAUTH_STATE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-
-setInterval(() => {
-    const now = Date.now();
-    for (const [k, v] of oauthStates) {
-        if (now - v.createdAt > OAUTH_STATE_TTL_MS) oauthStates.delete(k);
-    }
-}, OAUTH_STATE_CLEANUP_INTERVAL_MS).unref();
 
 // providerType is also used to dispatch to a specific provider — keep it small
 // and well-formed so a giant string can't slip through to downstream routing.
@@ -98,7 +88,7 @@ router.get('/providers/:type/auth-url', requireKnownProviderType, (req, res) => 
     try {
         const { type } = req.params;
         const state = crypto.randomBytes(32).toString('hex');
-        oauthStates.set(state, { type, createdAt: Date.now() });
+        oauthStateStore.set(state, type);
 
         const provider = EmailModel.getProviderInstance(type);
         const authUrl = provider.getAuthorizationUrl(state);
@@ -128,13 +118,11 @@ router.get('/:type/callback', requireKnownProviderType, async (req, res) => {
             return res.status(400).json({ error: 'Invalid authorization code' });
         }
 
-        const stateData = oauthStates.get(state);
-        if (!stateData || stateData.type !== type) {
+        const stateData = oauthStateStore.consume(state);
+        if (!stateData || (stateData.type && stateData.type !== type)) {
             return res.status(400).json({ error: 'Invalid state parameter' });
         }
-        // Always consume the state — prevents replay even if expired check returns first.
-        oauthStates.delete(state);
-        if (Date.now() - stateData.createdAt > OAUTH_STATE_TTL_MS) {
+        if (stateData.expired) {
             return res.status(400).json({ error: 'OAuth state expired, please retry sign-in' });
         }
 

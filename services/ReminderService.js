@@ -6,10 +6,13 @@
 const TaskModel = require('../models/TaskModel');
 const EmailModel = require('../models/EmailModel');
 const dataCleanupService = require('./DataCleanupService');
+const oauthStateStore = require('./OauthStateStore');
 const retentionConfig = require('../config/dataRetention');
 const NewsService = require('./NewsService');
 const cron = require('node-cron');
 const log = require('../utils/logger');
+
+const OAUTH_STATE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 class ReminderService {
     constructor() {
@@ -22,6 +25,7 @@ class ReminderService {
         this.syncTimer = null;
         this.lightCleanupTimer = null;
         this.fullCleanupTimer = null;
+        this.oauthStateCleanupTimer = null;
         this.cronJobs = [];
         this.listeners = [];
         this.syncStats = {
@@ -116,6 +120,11 @@ class ReminderService {
                 stats.consecutiveFailures = 0;
                 stats.lastSuccessAt = stats.lastSyncAt;
                 if (providerErrors.length === 0) stats.lastError = null;
+            }
+
+            if (totalNew > 0) {
+                try { dataCleanupService.cleanupOldEmails(); }
+                catch (error) { log.error('Error cleaning up old emails after sync', { error: error.message }); }
             }
 
             return totalNew;
@@ -232,6 +241,9 @@ class ReminderService {
         // Full cleanup once a day
         this.fullCleanupTimer = jittered(this.fullCleanupInterval, safeSync('runFullCleanup', () => this.runFullCleanup()));
 
+        // OAuth state expiry sweep every 5 min — keeps ownership of all timers in this service
+        this.oauthStateCleanupTimer = jittered(OAUTH_STATE_CLEANUP_INTERVAL_MS, safeSync('cleanupOauthStates', () => oauthStateStore.cleanup()));
+
         // Do initial check and sync (also wrapped — unhandled rejections from these shouldn't crash startup)
         safeAsync('checkReminders[initial]', () => this.checkReminders())();
         safeAsync('syncEmails[initial]', () => this.syncEmails())();
@@ -292,6 +304,7 @@ class ReminderService {
         clearJittered(this.syncTimer); this.syncTimer = null;
         clearJittered(this.lightCleanupTimer); this.lightCleanupTimer = null;
         clearJittered(this.fullCleanupTimer); this.fullCleanupTimer = null;
+        clearJittered(this.oauthStateCleanupTimer); this.oauthStateCleanupTimer = null;
 
         this.cronJobs.forEach(job => job.stop());
         this.cronJobs = [];
